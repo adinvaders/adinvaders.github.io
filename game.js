@@ -2,51 +2,53 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- SETUP ---
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 900;
-    canvas.height = 700;
+    canvas.width = 900; canvas.height = 700;
 
-    // --- UI ELEMENTS ---
+    // --- UI & AUDIO ---
     const scoreDisplay = document.getElementById('score-display');
     const healthBar = document.getElementById('health-bar-inner');
     const shieldBar = document.getElementById('shield-bar-inner');
-    const startScreen = document.getElementById('start-screen');
-    const gameOverScreen = document.getElementById('game-over-screen');
-    const startButton = document.getElementById('startButton');
-    const restartButton = document.getElementById('restartButton');
+    const startScreen = document.getElementById('start-screen'), gameOverScreen = document.getElementById('game-over-screen');
+    const startButton = document.getElementById('startButton'), restartButton = document.getElementById('restartButton');
     const finalScoreDisplay = document.getElementById('finalScore');
-
-    // --- AUDIO ASSETS ---
     const sounds = {
         hit: new Audio('https://www.zapsplat.com/wp-content/uploads/2015/sound-effects-the-sound-pack-tree/tspt_computer_mouse_click_single_002.mp3'),
         destroy: new Audio('https://www.zapsplat.com/wp-content/uploads/2015/sound-effects-BFG-sound-effects/BFG_ui_generic_button_click_delete_hard_001.mp3'),
         damage: new Audio('https://www.zapsplat.com/wp-content/uploads/2015/sound-effects-four-stones/fs_ui_jingle_negative_02_082.mp3'),
-        powerup: new Audio('https://www.zapsplat.com/wp-content/uploads/2015/sound-effects-four-stones/fs_ui_jingle_positive_01_091.mp3')
+        powerup: new Audio('https://www.zapsplat.com/wp-content/uploads/2015/sound-effects-four-stones/fs_ui_jingle_positive_01_091.mp3'),
+        fakeClick: new Audio('https://www.zapsplat.com/wp-content/uploads/2015/sound-effects-46416/zapsplat_multimedia_button_press_plastic_click_002_47805.mp3')
     };
     const playSound = (sound) => sound.cloneNode().play();
 
-    // --- GAME STATE ---
-    let score, health, gameOver, gameRunning, mouse, ads, powerups, particles, adSpawnTimer, difficultyMultiplier, cursorSlowdown;
+    // --- GAME STATE & PLAYER ---
+    let state = {};
+    const player = { shield: {}, powerups: {} };
 
-    // --- PLAYER STATE ---
-    const player = {
-        shield: { active: false, autoActive: false, autoDuration: 0, radius: 40, rechargeTimer: 0, maxRecharge: 200 },
-        powerups: { superClick: false }
-    };
+    function resetState() {
+        state = {
+            score: 0, health: 100, gameOver: false, gameRunning: false,
+            mouse: { x: canvas.width / 2, y: canvas.height / 2, targetX: canvas.width / 2, targetY: canvas.height / 2 },
+            ads: [], powerups: [], particles: [],
+            adSpawnTimer: 120, difficultyMultiplier: 1,
+            targetSlowdown: 0, currentSlowdown: 0,
+            damageFlash: 0
+        };
+        Object.assign(player, {
+            shield: { active: false, autoActive: false, autoDuration: 0, radius: 40, rechargeTimer: 0, maxRecharge: 250 },
+            powerups: { superClick: false }
+        });
+    }
 
     // --- EVENT LISTENERS ---
     canvas.addEventListener('mousemove', e => {
         const rect = canvas.getBoundingClientRect();
-        let targetX = e.clientX - rect.left;
-        let targetY = e.clientY - rect.top;
-        mouse.x += (targetX - mouse.x) * (1 - cursorSlowdown);
-        mouse.y += (targetY - mouse.y) * (1 - cursorSlowdown);
+        state.mouse.targetX = e.clientX - rect.left;
+        state.mouse.targetY = e.clientY - rect.top;
     });
     canvas.addEventListener('mousedown', e => {
         e.preventDefault();
         if (e.button === 0) handleLeftClick();
-        if (e.button === 2 && player.shield.rechargeTimer <= 0) {
-            player.shield.active = true;
-        }
+        if (e.button === 2 && player.shield.rechargeTimer <= 0 && !player.shield.autoActive) player.shield.active = true;
     });
     canvas.addEventListener('mouseup', e => {
         e.preventDefault();
@@ -59,307 +61,261 @@ document.addEventListener('DOMContentLoaded', () => {
     startButton.addEventListener('click', startGame);
     restartButton.addEventListener('click', startGame);
 
-    function resetState() {
-        score = 0;
-        health = 100;
-        gameOver = false;
-        ads = [];
-        powerups = [];
-        particles = [];
-        adSpawnTimer = 120;
-        difficultyMultiplier = 1;
-        cursorSlowdown = 0;
-        mouse = { x: canvas.width / 2, y: canvas.height / 2 };
-        Object.assign(player.shield, { active: false, autoActive: false, autoDuration: 0, rechargeTimer: 0 });
-        player.powerups.superClick = false;
-    }
-
+    // --- GAME FLOW & UI ---
     function startGame() {
         resetState();
         updateUI();
         startScreen.style.display = 'none';
         gameOverScreen.style.display = 'none';
-        gameRunning = true;
+        state.gameRunning = true;
         gameLoop();
     }
-
     function endGame() {
-        gameOver = true;
-        gameRunning = false;
-        finalScoreDisplay.textContent = score;
+        state.gameOver = true; state.gameRunning = false;
+        finalScoreDisplay.textContent = state.score;
         gameOverScreen.style.display = 'flex';
     }
-
     function updateUI() {
-        scoreDisplay.textContent = `SCORE: ${score}`;
-        healthBar.style.width = `${health}%`;
-        healthBar.style.backgroundColor = health > 50 ? '#00ff00' : health > 25 ? '#ffff00' : '#ff0000';
+        scoreDisplay.textContent = `SCORE: ${state.score}`;
+        healthBar.style.width = `${state.health}%`;
         const shieldCharge = 100 - (player.shield.rechargeTimer / player.shield.maxRecharge) * 100;
         shieldBar.style.width = `${shieldCharge}%`;
     }
 
+    // --- CORE MECHANICS ---
     function takeDamage(amount) {
         if (player.shield.active || player.shield.autoActive) return;
-        health = Math.max(0, health - amount);
+        state.health = Math.max(0, state.health - amount);
         playSound(sounds.damage);
-        document.body.classList.add('damage-flash');
-        setTimeout(() => document.body.classList.remove('damage-flash'), 150);
+        state.damageFlash = 15; // Flash for 15 frames
         updateUI();
-        if (health <= 0) endGame();
+        if (state.health <= 0) endGame();
     }
-
     function createDestructionParticles(x, y, color) {
-        for (let i = 0; i < 20; i++) {
-            particles.push(new DestructionParticle(x, y, color));
-        }
+        for (let i = 0; i < 20; i++) particles.push(new DestructionParticle(x, y, color));
     }
-
     function handleLeftClick() {
-        // Check powerups first
-        for (let i = powerups.length - 1; i >= 0; i--) {
-            if (isPointInRect(mouse, powerups[i])) {
-                powerups[i].activate();
-                powerups.splice(i, 1);
-                return;
+        for (let i = state.powerups.length - 1; i >= 0; i--) {
+            if (isPointInRect(state.mouse, state.powerups[i])) {
+                state.powerups[i].activate(); state.powerups.splice(i, 1); return;
             }
         }
-
-        // Check ads
-        for (let i = ads.length - 1; i >= 0; i--) {
-            const ad = ads[i];
-            const superClickDestroy = player.powerups.superClick && isPointInRect(mouse, ad);
-
-            if (superClickDestroy || (ad.closeButton && isPointInRect(mouse, ad.closeButton))) {
-                score += ad.points;
+        for (let i = state.ads.length - 1; i >= 0; i--) {
+            const ad = state.ads[i];
+            const superClickDestroy = player.powerups.superClick && isPointInRect(state.mouse, ad);
+            if (ad.fakeCloseButton && isPointInRect(state.mouse, ad.fakeCloseButton)) {
+                takeDamage(ad.clickDamage * 2); playSound(sounds.fakeClick); break;
+            }
+            if (superClickDestroy || (ad.closeButton && isPointInRect(state.mouse, ad.closeButton))) {
+                state.score += ad.points;
                 playSound(sounds.destroy);
                 createDestructionParticles(ad.x + ad.width / 2, ad.y + ad.height / 2, ad.color);
-                ads.splice(i, 1);
+                state.ads.splice(i, 1);
                 if (player.powerups.superClick) player.powerups.superClick = false;
                 break;
-            } else if (ad.takeHit && isPointInRect(mouse, ad)) {
-                ad.takeHit();
-                break;
-            } else if (isPointInRect(mouse, ad)) {
-                takeDamage(ad.clickDamage);
-                playSound(sounds.hit);
-                break;
+            } else if (ad.takeHit && isPointInRect(state.mouse, ad)) {
+                ad.takeHit(); break;
+            } else if (isPointInRect(state.mouse, ad)) {
+                takeDamage(ad.clickDamage); playSound(sounds.hit); break;
             }
         }
         updateUI();
     }
-
     function spawnAd() {
         const adType = Math.random();
-        const x = Math.random() * (canvas.width - 350);
-        const y = Math.random() * (canvas.height - 250);
+        const x = Math.random() * (canvas.width - 400) + 20;
+        const y = Math.random() * (canvas.height - 300) + 20;
 
-        if (adType < 0.4) ads.push(new PopupAd(x, y));
-        else if (adType < 0.6) ads.push(new VideoAd(x, y));
-        else if (adType < 0.75) ads.push(new CookieConsentStack(x, y));
-        else if (adType < 0.9) ads.push(new FakeVirusAlert());
-        else ads.push(new BannerAd());
+        if (adType < 0.35) state.ads.push(new PopupAd(x, y, state.difficultyMultiplier));
+        else if (adType < 0.55) state.ads.push(new VideoAd(x, y));
+        else if (adType < 0.7) state.ads.push(new CookieConsentStack(x, y));
+        else if (adType < 0.85) state.ads.push(new FakeVirusAlert());
+        else state.ads.push(new BannerAd());
     }
-
     function spawnPowerup() {
-        if (powerups.length === 0 && Math.random() < 0.005) {
-            const x = Math.random() * (canvas.width - 60);
-            const y = Math.random() * (canvas.height - 60);
+        if (state.powerups.length === 0 && Math.random() < 0.005) {
+            const x = Math.random() * (canvas.width - 60), y = Math.random() * (canvas.height - 60);
             const type = ['BOMB', 'AUTO_SHIELD', 'SUPER_CLICK'][Math.floor(Math.random() * 3)];
-            powerups.push(new Powerup(x, y, type));
+            state.powerups.push(new Powerup(x, y, type));
         }
     }
-
-    // --- HELPER FUNCTIONS ---
     const isPointInRect = (point, rect) => point.x > rect.x && point.x < rect.x + rect.width && point.y > rect.y && point.y < rect.y + rect.height;
-    const getDistance = (x1, y1, x2, y2) => Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
 
-    // --- AD CLASSES ---
+    // --- CLASSES (REDESIGNED) ---
     class PopupAd {
-        constructor(x, y) {
-            this.x = x; this.y = y; this.width = 200; this.height = 120;
-            this.clickDamage = 5; this.points = 10;
-            this.color = `hsl(${Math.random() * 360}, 70%, 80%)`;
-            this.closeButton = { x: this.x + this.width - 25, y: this.y + 5, width: 20, height: 20 };
-            this.message = ["You've Won a Prize!", "Local Singles In Your Area!", "Your PC is Slow!"][Math.floor(Math.random() * 3)];
+        constructor(x, y, difficulty) {
+            this.x = x; this.y = y; this.width = 320; this.height = 180;
+            this.clickDamage = 5; this.points = 10; this.color = '#fff';
+            this.title = ["Congratulations!", "Claim Your Reward", "System Alert"][Math.floor(Math.random() * 3)];
+            this.message = ["You've been selected to receive a FREE gift card.", "Click now to claim an exclusive offer, limited time only.", "Your system requires an immediate security scan."][Math.floor(Math.random() * 3)];
+            // Harder difficulty introduces fake close buttons
+            this.hasFakeCloseButton = difficulty > 1.5 && Math.random() < 0.5;
+            if (this.hasFakeCloseButton) {
+                this.fakeCloseButton = { x: this.x + this.width - 28, y: this.y + 8, width: 20, height: 20 };
+                this.closeButton = { x: this.x + 5, y: this.y + 5, width: 10, height: 10 }; // Real one is tiny
+            } else {
+                this.closeButton = { x: this.x + this.width - 28, y: this.y + 8, width: 20, height: 20 };
+            }
         }
         update() {}
         draw(ctx) {
-            ctx.fillStyle = this.color; ctx.strokeStyle = 'black'; ctx.lineWidth = 2;
-            ctx.fillRect(this.x, this.y, this.width, this.height); ctx.strokeRect(this.x, this.y, this.width, this.height);
-            ctx.fillStyle = 'black'; ctx.font = "16px 'Comic Sans MS'"; ctx.textAlign = 'center';
-            ctx.fillText(this.message, this.x + this.width / 2, this.y + 60);
-            ctx.fillStyle = 'red'; ctx.fillRect(this.closeButton.x, this.closeButton.y, this.closeButton.width, this.closeButton.height);
-            ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.strokeText('X', this.closeButton.x + 10, this.closeButton.y + 15);
-        }
-    }
-
-    class BannerAd {
-        constructor() {
-            this.width = canvas.width; this.height = 60; this.x = 0;
-            this.y = Math.random() > 0.5 ? -this.height : canvas.height;
-            this.vy = (this.y < 0) ? (1 + Math.random()) * difficultyMultiplier : (-1 - Math.random()) * difficultyMultiplier;
-            this.contactDamage = 15; this.clickDamage = 10; this.points = 0;
-            this.color = `hsl(${Math.random() * 360}, 90%, 60%)`;
-            this.closeButton = null;
-        }
-        update() {
-            this.y += this.vy;
-            if (isPointInRect(mouse, this)) takeDamage(this.contactDamage * 0.2);
-        }
-        draw(ctx) {
-            ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y, this.width, this.height);
-            ctx.fillStyle = 'yellow'; ctx.font = "bold 30px 'VT323'"; ctx.textAlign = 'center';
-            ctx.fillText("!!! DOWNLOAD NOW !!! >>> GET RICH QUICK <<< !!!", this.x + this.width / 2, this.y + 40);
+            ctx.fillStyle = this.color; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 20;
+            ctx.fillRect(this.x, this.y, this.width, this.height); ctx.shadowBlur = 0;
+            ctx.fillStyle = '#f0f0f0'; ctx.fillRect(this.x, this.y, this.width, 36);
+            ctx.fillStyle = '#333'; ctx.font = "bold 14px 'Inter'"; ctx.textAlign = 'left';
+            ctx.fillText(this.title, this.x + 15, this.y + 24);
+            ctx.font = "14px 'Inter'"; ctx.textAlign = 'center';
+            ctx.fillText(this.message, this.x + this.width / 2, this.y + 90);
+            
+            // Draw real close button
+            ctx.fillStyle = '#ddd';
+            ctx.fillRect(this.closeButton.x, this.closeButton.y, this.closeButton.width, this.closeButton.height);
+            ctx.strokeStyle = '#555'; ctx.lineWidth = this.hasFakeCloseButton ? 1 : 2; ctx.textAlign = 'center';
+            ctx.strokeText('X', this.closeButton.x + this.closeButton.width/2, this.closeButton.y + this.closeButton.height*0.75);
+            
+            // Draw fake one if it exists
+            if (this.hasFakeCloseButton) {
+                ctx.fillStyle = '#e8e8e8';
+                ctx.fillRect(this.fakeCloseButton.x, this.fakeCloseButton.y, this.fakeCloseButton.width, this.fakeCloseButton.height);
+                ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
+                ctx.strokeText('X', this.fakeCloseButton.x + 10, this.fakeCloseButton.y + 15);
+            }
         }
     }
 
     class VideoAd {
         constructor(x, y) {
-            this.x = x; this.y = y; this.width = 300; this.height = 180;
-            this.clickDamage = 10; this.points = 25;
-            this.waveTimer = 60; this.color = '#333';
-            this.closeButton = { x: this.x + this.width - 85, y: this.y + this.height - 30, width: 80, height: 25 };
+            this.x = x; this.y = y; this.width = 380; this.height = 210;
+            this.clickDamage = 10; this.points = 25; this.color = '#000';
+            this.progress = 0;
+            this.closeButton = { x: this.x + this.width - 95, y: this.y + this.height - 40, width: 80, height: 25 };
         }
-        update() {
-            this.waveTimer--;
-            if (this.waveTimer <= 0) {
-                for (let i = 0; i < 8; i++) {
-                    particles.push(new DamageParticle(this.x + this.width / 2, this.y + this.height / 2, (i / 8) * Math.PI * 2));
-                }
-                this.waveTimer = 120 / difficultyMultiplier;
-            }
-        }
+        update() { this.progress = (this.progress + 0.2) % 100; }
         draw(ctx) {
             ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y, this.width, this.height);
-            ctx.fillStyle = 'white'; ctx.font = "20px 'VT323'"; ctx.textAlign = 'center';
-            ctx.fillText("Your video will play after this ad", this.x + this.width / 2, this.y + 80);
-            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(this.closeButton.x, this.closeButton.y, this.closeButton.width, this.closeButton.height);
-            ctx.fillStyle = 'white'; ctx.font = "18px 'VT323'";
-            ctx.fillText("Skip Ad >", this.closeButton.x + 40, this.closeButton.y + 18);
+            ctx.font = "16px 'Inter'"; ctx.fillStyle = '#ccc'; ctx.textAlign = 'center';
+            ctx.fillText("An ad is playing...", this.x + this.width / 2, this.y + this.height / 2);
+            // Progress Bar
+            ctx.fillStyle = '#444'; ctx.fillRect(this.x + 10, this.y + this.height - 15, this.width - 20, 5);
+            ctx.fillStyle = '#ffcc00'; ctx.fillRect(this.x + 10, this.y + this.height - 15, (this.width - 20) * (this.progress/100), 5);
+            // Skip Button
+            ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(this.closeButton.x, this.closeButton.y, this.closeButton.width, this.closeButton.height);
+            ctx.fillStyle = '#aaa'; ctx.font = "12px 'Inter'";
+            ctx.fillText("Skip Ad >", this.closeButton.x + 40, this.closeButton.y + 17);
         }
     }
 
     class CookieConsentStack {
         constructor(x, y) {
-            this.x = x; this.y = y; this.width = 320; this.height = 150;
+            this.x = x; this.y = y; this.width = 350; this.height = 160;
             this.clickDamage = 2; this.points = 50; this.layers = 3;
-            this.slowFactor = 0.85; this.color = '#f0f0f0';
-            this.closeButton = null; // Has a custom hit mechanic
-            this.button = { x: this.x + 90, y: this.y + 100, width: 140, height: 30 };
-            this.messages = ["Accept All Cookies", "Accept Essential", "Confirm Choices"];
+            this.slowFactor = 0.6; this.color = '#333842';
+            this.button = { x: this.x + 185, y: this.y + 105, width: 140, height: 35 };
+            this.messages = ["Accept All", "Confirm Preferences", "Acknowledge"];
         }
         takeHit() {
-            if (isPointInRect(mouse, this.button)) {
-                this.layers--;
-                this.points += 15;
-                playSound(sounds.hit);
+            if (isPointInRect(state.mouse, this.button)) {
+                this.layers--; playSound(sounds.hit);
                 if (this.layers <= 0) {
-                    score += this.points;
-                    playSound(sounds.destroy);
+                    state.score += this.points; playSound(sounds.destroy);
                     createDestructionParticles(this.x + this.width / 2, this.y + this.height / 2, this.color);
-                    ads = ads.filter(ad => ad !== this);
+                    state.ads = state.ads.filter(ad => ad !== this);
                 }
-            } else {
-                takeDamage(this.clickDamage);
-            }
+            } else takeDamage(this.clickDamage);
         }
         update() {
-            cursorSlowdown = isPointInRect(mouse, this) ? this.slowFactor : 0;
+            state.targetSlowdown = isPointInRect(state.mouse, this) ? this.slowFactor : 0;
         }
         draw(ctx) {
-            for (let i = this.layers; i > 0; i--) {
-                ctx.fillStyle = `rgba(200, 200, 200, ${1 - i*0.2})`;
-                ctx.strokeStyle = '#555';
-                ctx.fillRect(this.x + i * 4, this.y - i * 4, this.width, this.height);
-                ctx.strokeRect(this.x + i * 4, this.y - i * 4, this.width, this.height);
-            }
-            ctx.fillStyle = 'black'; ctx.font = "bold 18px Arial"; ctx.textAlign = 'center';
-            ctx.fillText("We value your privacy (not really)", this.x + this.width / 2, this.y + 40);
-            ctx.fillStyle = '#007bff'; ctx.fillRect(this.button.x, this.button.y, this.button.width, this.button.height);
-            ctx.fillStyle = 'white'; ctx.font = "bold 16px Arial";
-            ctx.fillText(this.messages[this.layers - 1] || "GONE!", this.button.x + this.button.width / 2, this.button.y + 20);
+            ctx.fillStyle = this.color; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 20;
+            ctx.fillRect(this.x, this.y, this.width, this.height); ctx.shadowBlur = 0;
+            ctx.fillStyle = '#fff'; ctx.font = "bold 16px 'Poppins'"; ctx.textAlign = 'left';
+            ctx.fillText("We use cookies to enhance your experience.", this.x + 20, this.y + 40);
+            ctx.fillStyle = '#6c63ff'; ctx.fillRect(this.button.x, this.button.y, this.button.width, this.button.height);
+            ctx.fillStyle = 'white'; ctx.font = "bold 14px 'Inter'"; ctx.textAlign = 'center';
+            ctx.fillText(this.messages[this.layers - 1], this.button.x + this.button.width / 2, this.button.y + 22);
         }
     }
     
     class FakeVirusAlert {
         constructor() {
-            this.width = 350; this.height = 180;
+            this.width = 400; this.height = 120;
             this.x = Math.random() < 0.5 ? -this.width : canvas.width;
             this.y = Math.random() * (canvas.height - this.height);
-            this.speed = 0.5 + Math.random() * 0.5 * difficultyMultiplier;
+            this.speed = (0.8 + Math.random() * 0.5) * state.difficultyMultiplier;
             this.contactDamage = 20; this.clickDamage = 15; this.points = 40;
-            this.color = '#c0c0c0';
-            this.closeButton = { x: this.x + this.width - 28, y: this.y + 3, width: 25, height: 22 };
+            this.color = '#1E2D3F';
+            this.closeButton = { x: this.x + this.width - 25, y: this.y + 5, width: 20, height: 20 };
+            this.wobble = Math.random() * 100;
         }
         update() {
-            const angle = Math.atan2(mouse.y - (this.y + this.height/2), mouse.x - (this.x + this.width/2));
+            const angle = Math.atan2(state.mouse.y - (this.y + this.height/2), state.mouse.x - (this.x + this.width/2));
             this.x += Math.cos(angle) * this.speed;
-            this.y += Math.sin(angle) * this.speed;
-            this.closeButton.x = this.x + this.width - 28; this.closeButton.y = this.y + 3;
-            if (isPointInRect(mouse, this)) takeDamage(this.contactDamage * 0.1);
+            this.y += Math.sin(angle) * this.speed + Math.sin(this.wobble) * 0.5;
+            this.wobble += 0.1;
+            this.closeButton.x = this.x + this.width - 25; this.closeButton.y = this.y + 5;
+            if (isPointInRect(state.mouse, this)) takeDamage(this.contactDamage * 0.1);
         }
         draw(ctx) {
             ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y, this.width, this.height);
-            ctx.fillStyle = '#000080'; ctx.fillRect(this.x, this.y, this.width, 28);
-            ctx.fillStyle = 'white'; ctx.font = "bold 16px 'VT323'"; ctx.textAlign = 'left';
-            ctx.fillText("! WARNING !", this.x + 30, this.y + 20);
-            ctx.fillStyle = 'red'; ctx.fillRect(this.closeButton.x, this.closeButton.y, this.closeButton.width, this.closeButton.height);
-            ctx.fillStyle = 'white'; ctx.font = "bold 16px Arial"; ctx.fillText("X", this.closeButton.x + 8, this.y + 19);
-            ctx.fillStyle = 'red'; ctx.beginPath(); ctx.arc(this.x + 20, this.y + 100, 30, 0, 2*Math.PI); ctx.fill();
-            ctx.fillStyle = 'white'; ctx.font = "bold 40px Arial"; ctx.fillText("!", this.x + 18, this.y + 112);
-            ctx.fillStyle = 'black'; ctx.font = "18px Arial"; ctx.textAlign = 'left';
-            ctx.fillText("VIRUS DETECTED! Your files are", this.x + 70, this.y + 90);
-            ctx.fillText("at risk! Click to remove.", this.x + 70, this.y + 120);
+            ctx.fillStyle = '#D9534F'; ctx.font = "bold 24px 'Poppins'"; ctx.textAlign = 'left';
+            ctx.fillText("!", this.x + 20, this.y + 60);
+            ctx.fillStyle = '#fff'; ctx.font = "bold 16px 'Inter'";
+            ctx.fillText("Security Threat Detected", this.x + 50, this.y + 45);
+            ctx.font = "14px 'Inter'"; ctx.fillStyle = '#ccc';
+            ctx.fillText("Windows Defender found 5 viruses. Immediate action required.", this.x + 50, this.y + 70);
+            ctx.fillStyle = '#aaa'; ctx.fillRect(this.closeButton.x, this.closeButton.y, this.closeButton.width, this.closeButton.height);
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.textAlign = 'center';
+            ctx.strokeText('X', this.closeButton.x + 10, this.closeButton.y + 15);
         }
     }
 
-    // --- PARTICLE & POWERUP CLASSES ---
-    class DamageParticle {
-        constructor(x, y, angle) {
-            this.x = x; this.y = y; this.radius = 5;
-            this.speed = 2 * difficultyMultiplier;
-            this.vx = Math.cos(angle) * this.speed; this.vy = Math.sin(angle) * this.speed;
-            this.lifespan = 100; this.damage = 5;
+    // Unchanged classes (BannerAd, Particles, Powerup) with minor style tweaks
+    class BannerAd { /* ... (code from previous version, largely unchanged) ... */
+        constructor() {
+            this.width = canvas.width; this.height = 80; this.x = 0;
+            this.y = Math.random() > 0.5 ? -this.height : canvas.height;
+            this.vy = (this.y < 0) ? (1.5 + Math.random()) * state.difficultyMultiplier : (-1.5 - Math.random()) * state.difficultyMultiplier;
+            this.contactDamage = 15; this.clickDamage = 10; this.points = 0;
+            this.color1 = `hsl(${Math.random() * 360}, 100%, 50%)`;
+            this.color2 = `hsl(${Math.random() * 360}, 100%, 50%)`;
+            this.closeButton = null;
         }
-        update() {
-            this.x += this.vx; this.y += this.vy; this.lifespan--;
-            if (getDistance(this.x, this.y, mouse.x, mouse.y) < this.radius + 5) {
-                takeDamage(this.damage);
-                this.lifespan = 0;
-            }
-        }
+        update() { this.y += this.vy; if (isPointInRect(state.mouse, this)) takeDamage(this.contactDamage * 0.2); }
         draw(ctx) {
-            ctx.fillStyle = 'orange'; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill();
+            let gradient = ctx.createLinearGradient(0, this.y, 0, this.y + this.height);
+            gradient.addColorStop(0, this.color1); gradient.addColorStop(1, this.color2);
+            ctx.fillStyle = gradient; ctx.fillRect(this.x, this.y, this.width, this.height);
+            ctx.fillStyle = 'white'; ctx.font = "bold 40px 'Poppins'"; ctx.textAlign = 'center'; ctx.shadowColor = 'black'; ctx.shadowBlur = 10;
+            ctx.fillText(">>> UNMISSABLE DEALS! CLICK NOW! <<<", this.x + this.width / 2, this.y + 55);
+            ctx.shadowBlur = 0;
         }
     }
-
-    class DestructionParticle {
+    class DestructionParticle { /* ... (code from previous version) ... */ 
         constructor(x, y, color) {
             this.x = x; this.y = y;
-            this.vx = (Math.random() - 0.5) * 4; this.vy = (Math.random() - 0.5) * 4;
-            this.lifespan = 50; this.radius = Math.random() * 3 + 1;
-            this.color = color;
+            this.vx = (Math.random() - 0.5) * 5; this.vy = (Math.random() - 0.5) * 5;
+            this.lifespan = 50; this.radius = Math.random() * 3 + 1; this.color = color;
         }
-        update() { this.x += this.vx; this.y += this.vy; this.lifespan--; }
+        update() { this.x += this.vx; this.y += this.vy; this.vy += 0.05; this.lifespan--; }
         draw(ctx) {
             ctx.fillStyle = this.color; ctx.globalAlpha = this.lifespan / 50;
             ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI); ctx.fill();
             ctx.globalAlpha = 1;
         }
     }
-    
-    class Powerup {
+    class Powerup { /* ... (code from previous version) ... */ 
         constructor(x, y, type) {
             this.x = x; this.y = y; this.width = 50; this.height = 50; this.type = type;
-            this.colors = { 'BOMB': '#00f', 'AUTO_SHIELD': '#0f0', 'SUPER_CLICK': '#f0f' };
+            this.colors = { 'BOMB': '#ff3d3d', 'AUTO_SHIELD': '#00d4ff', 'SUPER_CLICK': '#ff00ff' };
             this.text = { 'BOMB': 'BOMB', 'AUTO_SHIELD': 'SHLD', 'SUPER_CLICK': 'CLCK' };
         }
-        activate() {
+        activate() { /* Unchanged */
             playSound(sounds.powerup);
             switch (this.type) {
                 case 'BOMB':
-                    ads = ads.filter(ad => ad instanceof BannerAd || ad instanceof FakeVirusAlert);
-                    score += 50;
+                    state.ads = state.ads.filter(ad => ad instanceof BannerAd || ad instanceof FakeVirusAlert);
+                    state.score += 50;
                     break;
                 case 'AUTO_SHIELD':
                     player.shield.autoActive = true;
@@ -371,66 +327,66 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         draw(ctx) {
-            ctx.fillStyle = this.colors[this.type]; ctx.fillRect(this.x, this.y, this.width, this.height);
-            ctx.strokeStyle = 'white'; ctx.lineWidth = 3; ctx.strokeRect(this.x, this.y, this.width, this.height);
-            ctx.fillStyle = 'white'; ctx.font = "bold 20px 'VT323'"; ctx.textAlign = 'center';
-            ctx.fillText(this.text[this.type], this.x + 25, this.y + 32);
+            ctx.fillStyle = this.colors[this.type]; ctx.shadowColor = this.colors[this.type]; ctx.shadowBlur = 15;
+            ctx.fillRect(this.x, this.y, this.width, this.height); ctx.shadowBlur = 0;
+            ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.strokeRect(this.x, this.y, this.width, this.height);
+            ctx.fillStyle = 'white'; ctx.font = "bold 20px 'Poppins'"; ctx.textAlign = 'center';
+            ctx.fillText(this.text[this.type], this.x + 25, this.y + 33);
         }
     }
-
+    
     // --- MAIN GAME LOOP ---
     function gameLoop() {
-        if (gameOver) return;
-
-        // --- UPDATE LOGIC ---
-        adSpawnTimer--;
-        if (adSpawnTimer <= 0) {
+        if (state.gameOver) return;
+        // --- UPDATE ---
+        state.adSpawnTimer--;
+        if (state.adSpawnTimer <= 0) {
             spawnAd();
-            difficultyMultiplier += 0.03;
-            adSpawnTimer = Math.max(25, 150 / difficultyMultiplier);
+            state.difficultyMultiplier += 0.05; // Ramps up faster
+            state.adSpawnTimer = Math.max(15, 120 / state.difficultyMultiplier);
         }
         spawnPowerup();
 
-        cursorSlowdown = 0;
-        ads.forEach(ad => ad.update());
+        // **Smooth Cursor Logic**
+        state.targetSlowdown = 0;
+        state.ads.forEach(ad => ad.update());
+        state.currentSlowdown += (state.targetSlowdown - state.currentSlowdown) * 0.1;
+        state.mouse.x += (state.mouse.targetX - state.mouse.x) * (1 - state.currentSlowdown);
+        state.mouse.y += (state.mouse.targetY - state.mouse.y) * (1 - state.currentSlowdown);
         
-        for (let i = particles.length - 1; i >= 0; i--) {
-            particles[i].update();
-            if (particles[i].lifespan <= 0) particles.splice(i, 1);
+        for (let i = state.particles.length - 1; i >= 0; i--) {
+            state.particles[i].update(); if (state.particles[i].lifespan <= 0) state.particles.splice(i, 1);
         }
-        ads = ads.filter(ad => !(ad instanceof BannerAd) || (ad.y < canvas.height && ad.y > -ad.height));
-
+        state.ads = state.ads.filter(ad => !(ad instanceof BannerAd) || (ad.y < canvas.height && ad.y > -ad.height));
         if (player.shield.rechargeTimer > 0) player.shield.rechargeTimer--;
-        if (player.shield.autoDuration > 0) player.shield.autoDuration--;
-        else player.shield.autoActive = false;
-        
+        if (player.shield.autoDuration > 0) player.shield.autoDuration--; else player.shield.autoActive = false;
+        if (state.damageFlash > 0) state.damageFlash--;
         updateUI();
 
-        // --- DRAWING LOGIC ---
+        // --- DRAW ---
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ads.forEach(ad => ad.draw(ctx));
-        particles.forEach(p => p.draw(ctx));
-        powerups.forEach(p => p.draw(ctx));
+        canvas.classList.toggle('damage-flash', state.damageFlash > 0);
+        state.ads.forEach(ad => ad.draw(ctx));
+        state.particles.forEach(p => p.draw(ctx));
+        state.powerups.forEach(p => p.draw(ctx));
 
-        // Draw Player Shield (manual or auto)
-        const shieldIsOn = player.shield.active || player.shield.autoActive;
-        const shieldColor = player.shield.autoActive ? 'rgba(0, 255, 100, 0.4)' : 'rgba(0, 200, 255, 0.3)';
-        if (shieldIsOn) {
-            ctx.fillStyle = shieldColor;
-            ctx.strokeStyle = player.shield.autoActive ? 'lime' : 'cyan';
-            ctx.lineWidth = 3; ctx.beginPath();
-            ctx.arc(mouse.x, mouse.y, player.shield.radius, 0, Math.PI * 2);
+        // Draw Player Shield
+        if (player.shield.active || player.shield.autoActive) {
+            const shieldColor = player.shield.autoActive ? 'rgba(0, 255, 100, 0.2)' : 'rgba(0, 200, 255, 0.2)';
+            ctx.fillStyle = shieldColor; ctx.strokeStyle = player.shield.autoActive ? 'lime' : 'cyan'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(state.mouse.x, state.mouse.y, player.shield.radius, 0, Math.PI * 2);
             ctx.fill(); ctx.stroke();
         }
         
         // Draw Custom Cursor
-        const cursorColor = player.powerups.superClick ? '#f0f' : '#000';
+        const cursorColor = player.powerups.superClick ? '#ff00ff' : '#fff';
         ctx.strokeStyle = cursorColor; ctx.lineWidth = 2;
+        ctx.shadowColor = cursorColor; ctx.shadowBlur = player.powerups.superClick ? 10 : 0;
         ctx.beginPath();
-        ctx.moveTo(mouse.x - 10, mouse.y); ctx.lineTo(mouse.x + 10, mouse.y);
-        ctx.moveTo(mouse.x, mouse.y - 10); ctx.lineTo(mouse.x, mouse.y + 10);
-        ctx.stroke();
+        ctx.moveTo(state.mouse.x - 8, state.mouse.y); ctx.lineTo(state.mouse.x + 8, state.mouse.y);
+        ctx.moveTo(state.mouse.x, state.mouse.y - 8); ctx.lineTo(state.mouse.x, state.mouse.y + 8);
+        ctx.stroke(); ctx.shadowBlur = 0;
 
-        if (gameRunning) requestAnimationFrame(gameLoop);
+        if (state.gameRunning) requestAnimationFrame(gameLoop);
     }
 });
