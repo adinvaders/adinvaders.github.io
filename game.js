@@ -73,7 +73,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CORE MECHANICS ---
     function takeDamage(amount) { if(player.shield.active)return;state.health=Math.max(0,state.health-amount),playSound(assets.sounds.damage),state.screenShake=15,updateUI(),state.health<=0&&endGame(); }
     function spawnParticles(x, y, count, color, speed) { for (let i = 0; i < count; i++) state.particles.push(new Particle(x, y, color, speed)); }
-    function handleClick() { for (let i = state.entities.length - 1; i >= 0; i--) { if (state.entities[i].onClick && state.entities[i].onClick(state.mouse)) return; } }
+    
+    // !!! THIS IS THE FIXED FUNCTION !!!
+    function handleClick() {
+        // Loop backwards so the top-most entity is checked first.
+        for (let i = state.entities.length - 1; i >= 0; i--) {
+            const entity = state.entities[i];
+            // Check if the entity has an onClick method, then call it.
+            // If the method returns true (meaning the click was handled), stop the loop.
+            if (entity.onClick && entity.onClick(state.mouse)) {
+                return; 
+            }
+        }
+    }
+
     function spawnAd() {
         const adType = Math.random(); const x = Math.random() * (canvas.width - 450) + 25; const y = Math.random() * (canvas.height - 400) + 25;
         if (state.entities.length > 10) return;
@@ -91,7 +104,6 @@ document.addEventListener('DOMContentLoaded', () => {
     class Entity { constructor(x,y,w,h){Object.assign(this,{x,y,w,h,scale:0,opacity:0,alive:true})} update(){if(this.scale<1)this.scale+=.1;if(this.opacity<1)this.opacity+=.1} destroy(e=0,t=assets.sounds.destroy){this.alive=false;playSound(t);state.score+=e;state.screenShake=Math.max(state.screenShake,8);spawnParticles(this.x+this.w/2,this.y+this.h/2,25,"#00BFFF",4)} }
     class Particle { constructor(x,y,c,s){this.x=x;this.y=y;this.color=c;const a=Math.random()*Math.PI*2;this.vx=Math.cos(a)*Math.random()*s;this.vy=Math.sin(a)*Math.random()*s;this.lifespan=1;this.decay=Math.random()*.03+.01} update(){this.x+=this.vx;this.y+=this.vy;this.vx*=.98;this.vy*=.98;this.lifespan-=this.decay} draw(){ctx.globalAlpha=this.lifespan;ctx.fillStyle=this.color;ctx.fillRect(this.x,this.y,2,2)} }
     
-    // --- All Ad classes have been verified for correct click logic ---
     class PopupAd extends Entity {
         constructor(x, y) { super(x, y, 380, 200); this.clickDamage = 10; this.points = 20; this.hasFake = state.difficulty > 1.3 && Math.random() < 0.4; this.buttons = {real: { x: this.x + this.w - 30, y: this.y + 10, w: 20, h: 20 }, fake: this.hasFake ? { x: this.x + this.w - 60, y: this.y + 10, w: 20, h: 20 } : null }; }
         onClick(mouse) { if (!this.alive || this.scale < 1 || !isPointInRect(mouse, this)) return false; if (isPointInRect(mouse, this.buttons.real)) { this.destroy(this.points); return true; } if (this.hasFake && isPointInRect(mouse, this.buttons.fake)) { takeDamage(this.clickDamage * 2); playSound(assets.sounds.fakeClick); return true; } takeDamage(this.clickDamage); return true; }
