@@ -45,6 +45,11 @@ const DOMElements = {
     waveAlertSubtitle: document.getElementById('wave-alert-subtitle'),
 };
 
+// --- SVG ICONS ---
+const SVGIcons = {
+    warning: `<svg class="ad-icon" fill="var(--danger-color)" viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>`
+};
+
 // =================================================================================
 // --- PLAYER MODULE ---
 // =================================================================================
@@ -191,25 +196,33 @@ const PowerupManager = {
 // =================================================================================
 const AdManager = {
     adDefinitions: {
-        gremlinAd: { threat: 20, points: 250, create: () => AdManager.createAd('gremlin-ad', { title: 'Security Warning', init: (ad) => {
-            const closeBtn = ad.element.querySelector('.close-btn');
-            closeBtn.addEventListener('mouseover', () => {
-                if (state.systemFrozen) return;
-                const adRect = ad.element.getBoundingClientRect();
-                const btnRect = closeBtn.getBoundingClientRect();
-                const newX = Math.random() * (adRect.width - btnRect.width);
-                const newY = Math.random() * (adRect.height - btnRect.height);
-                closeBtn.style.transform = `translate(${newX}px, ${newY}px)`;
-            });
-        }})},
+        gremlinAd: { threat: 20, points: 250, create: () => AdManager.createAd('gremlin-ad', { title: 'Security Warning',
+            content: `${SVGIcons.warning}<div><h3>MALWARE DETECTED!</h3><p>Your system is at risk. Immediate action required.</p></div>`,
+            init: (ad) => {
+                const closeBtn = ad.element.querySelector('.close-btn');
+                ad.element.addEventListener('mouseover', () => {
+                    if (state.systemFrozen) return;
+                    // Note: We use mouseover on the ad itself, not just the button, for better UX
+                    const adRect = ad.element.getBoundingClientRect();
+                    const newX = Math.random() * (adRect.width - closeBtn.offsetWidth);
+                    const newY = Math.random() * (adRect.height - closeBtn.offsetHeight);
+                    closeBtn.style.transform = `translate(${newX}px, ${newY}px)`;
+                });
+            }
+        })},
+        misleadingXAd: { threat: 15, points: 150, create: () => AdManager.createAd('misleading-x-ad', { title: 'Claim Your Prize!',
+            content: `<p>You have won! Confirm below to receive your reward! <button class="real-x-btn">No thanks</button></p>`,
+            init: (ad) => {
+                ad.element.querySelector('.close-btn').classList.add('fake-x-btn');
+                ad.element.querySelector('.close-btn').onclick = (e) => { e.stopPropagation(); Player.takeDamage(10); };
+                ad.element.querySelector('.real-x-btn').onclick = (e) => { e.stopPropagation(); AdManager.destroyAd(ad, AdManager.adDefinitions.misleadingXAd.points); };
+            }
+        })},
         chatAd: { threat: 22, points: 350, create: () => AdManager.createAd('chat-ad', { title: 'LiveSupport Bot', closeable: false,
             content: `<div class="chat-log"><div class="typing-indicator">Bot is connecting...</div></div><button class="ad-btn" disabled>END CHAT</button>`,
             init: (ad) => {
                 const log = ad.element.querySelector('.chat-log'); const endButton = ad.element.querySelector('.ad-btn');
-                const messages = [
-                    { text: 'Hello, I am a certified support technician.' }, { text: 'Your system has sent us 17 critical error signals.' },
-                    { text: 'You must install our security patch immediately.' }, { text: 'Download link generating now...', isLink: true }
-                ];
+                const messages = [ { text: 'Hello, I am a certified support technician.' }, { text: 'Your system has sent us 17 critical error signals.' }, { text: 'You must install our security patch immediately.' }, { text: 'Download link generating now...', isLink: true } ];
                 let messageIndex = 0;
                 const typeMessage = () => {
                     if (state.systemFrozen) { ad.timers.push(setTimeout(typeMessage, 200)); return; }
@@ -222,11 +235,11 @@ const AdManager = {
                     log.scrollTop = log.scrollHeight; messageIndex++;
                     if (messageIndex < messages.length) ad.timers.push(setTimeout(typeMessage, 2000));
                 };
-                ad.timers.push(setTimeout(typeMessage, 1000), setTimeout(() => endButton.disabled = false, 4000));
+                ad.timers.push(setTimeout(typeMessage, 1000), setTimeout(() => { if (!state.systemFrozen) endButton.disabled = false; }, 4000));
                 endButton.onclick = (e) => { e.stopPropagation(); this.destroyAd(ad, this.adDefinitions.chatAd.points); };
             }
         })},
-        surveyAd: { threat: 18, points: 200, create: () => AdManager.createAd('survey-ad', { title: 'You\'ve been selected!', closeable: true,
+        surveyAd: { threat: 18, points: 200, create: () => AdManager.createAd('survey-ad', { title: 'You\'ve been selected!',
             content: `<div class="survey-content"></div>`,
             init: (ad) => {
                 ad.quizData = { currentQ: 0, questions: [
@@ -237,7 +250,6 @@ const AdManager = {
                 this.renderSurveyQuestion(ad);
             }
         })},
-        // Add other ad definitions here if needed...
     },
     renderSurveyQuestion(ad) {
         const { currentQ, questions } = ad.quizData; const questionData = questions[currentQ];
@@ -246,10 +258,8 @@ const AdManager = {
         ad.element.querySelector('.survey-content').innerHTML = `<div class="survey-question">${questionData.q}</div><div class="survey-options">${optionsHTML}</div><div class="survey-progress">${progressHTML}</div>`;
         ad.element.querySelectorAll('.survey-option').forEach(btn => {
             btn.onclick = (e) => {
-                e.stopPropagation();
-                if (state.systemFrozen) return;
-                const selectedIndex = parseInt(btn.dataset.index);
-                if (selectedIndex === questionData.correct) {
+                e.stopPropagation(); if (state.systemFrozen) return;
+                if (parseInt(btn.dataset.index) === questionData.correct) {
                     if (++ad.quizData.currentQ >= questions.length) { this.destroyAd(ad, this.adDefinitions.surveyAd.points + 50); }
                     else { this.renderSurveyQuestion(ad); }
                 } else { Player.takeDamage(5); }
@@ -261,14 +271,14 @@ const AdManager = {
         ad.element.className = `ad ${className}`;
         ad.element.style.left = `${5 + Math.random() * (DOMElements.gameScreen.clientWidth - 450)}px`;
         ad.element.style.top = `${5 + Math.random() * (DOMElements.gameScreen.clientHeight - 400)}px`;
-        ad.element.innerHTML = `${options.closeable !== false ? `<div class="ad-header"><span>${options.title}</span><button class="close-btn">×</button></div>` : `<div class="ad-header"><span>${options.title}</span></div>`}<div class="ad-content">${options.content || ''}</div>`;
+        ad.element.innerHTML = `<div class="ad-header"><span>${options.title}</span><button class="close-btn">×</button></div><div class="ad-content">${options.content || ''}</div>`;
         if (state.systemFrozen) ad.element.classList.add('frozen');
         const closeBtn = ad.element.querySelector('.close-btn');
         if (closeBtn) closeBtn.onclick = e => { e.stopPropagation(); this.destroyAd(ad, this.adDefinitions[className.split(' ')[0]].points); };
         if (options.init) options.init(ad);
         return ad;
     },
-    spawn(type) { const ad = this.adDefinitions[type].create(); state.activeAds.set(ad.id, ad); DOMElements.gameScreen.appendChild(ad.element); },
+    spawn(type) { if(!this.adDefinitions[type]) { console.error(`Ad type "${type}" not found.`); return; } const ad = this.adDefinitions[type].create(); state.activeAds.set(ad.id, ad); DOMElements.gameScreen.appendChild(ad.element); },
     destroyAd(ad, points) {
         if (!state.activeAds.has(ad.id)) return;
         ad.timers.forEach(clearTimeout);
