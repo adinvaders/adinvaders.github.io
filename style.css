@@ -171,3 +171,9 @@ button:hover {
     transform: translateY(-3px);
     box-shadow: 0 6px 25px rgba(0, 191, 255, 0.5);
 }
+button:disabled {
+    background: #555;
+    cursor: wait;
+    transform: none;
+    box-shadow: none;
+}
