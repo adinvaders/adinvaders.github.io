@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ad Invaders!</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Sans+MS&family=VT323&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="game-container">
+        <h1>🚀 Ad Invaders 🚀</h1>
+        <p class="subtitle">Your screen is under attack. Only your cursor can save it.</p>
+        
+        <div id="ui-bar">
+            <div id="score-display">SCORE: 0</div>
+            <div id="health-container">
+                <span>HEALTH:</span>
+                <div id="health-bar-outer">
+                    <div id="health-bar-inner"></div>
+                </div>
+            </div>
+             <div id="shield-container">
+                <span>SHIELD:</span>
+                <div id="shield-bar-outer">
+                    <div id="shield-bar-inner"></div>
+                </div>
+            </div>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="start-screen" class="overlay">
+            <div class="overlay-content">
+                <h2>Welcome to Ad Invaders!</h2>
+                <p>Survive the onslaught of malicious ads.</p>
+                <h3>Controls:</h3>
+                <ul>
+                    <li><strong>Left-Click:</strong> Hit "X" or "Skip" buttons to destroy ads.</li>
+                    <li><strong>Right-Click (Hold):</strong> Activate a shield to block damage.</li>
+                </ul>
+                <p><em>New threats detected: Chasing Virus Alerts and sticky Cookie Banners!</em></p>
+                <button id="startButton">Start the Invasion!</button>
+            </div>
+        </div>
+
+        <div id="game-over-screen" class="overlay" style="display: none;">
+            <div class="overlay-content">
+                <h2>SYSTEM OVERRUN</h2>
+                <p>The ads have conquered your desktop.</p>
+                <p>Final Score: <span id="finalScore">0</span></p>
+                <button id="restartButton">Reboot System?</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="game.js"></script>
+</body>
+</html>
