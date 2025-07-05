@@ -66,12 +66,17 @@ body { background-color: var(--background-color); color: var(--text-color); font
 .ad.destroy { opacity: 0; transform: scale(0.8); filter: blur(5px); }
 .ad.frozen { filter: blur(1px) saturate(0) brightness(0.7); box-shadow: 0 0 15px var(--secondary-color); }
 .ad-header { background-color: rgba(255, 0, 255, 0.1); padding: 8px 12px; font-weight: 700; font-size: 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--primary-color); font-family: var(--font-ui); }
-.close-btn { background: none; border: 1px solid var(--primary-color); color: var(--primary-color); font-family: 'monospace'; font-weight: bold; font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 4px; cursor: pointer; transition: background-color 0.2s, color 0.2s; }
+.close-btn { background: none; border: 1px solid var(--primary-color); color: var(--primary-color); font-family: 'monospace'; font-weight: bold; font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 4px; cursor: pointer; transition: background-color 0.2s, color 0.2s, transform 0.2s ease-out; }
 .close-btn:hover { background-color: var(--primary-color); color: #fff; }
 .ad-content { padding: 15px; }
 
 /* Ad Types */
-.gremlin-ad .close-btn { position: absolute; z-index: 10; transition: transform 0.2s ease-out; }
+.gremlin-ad .close-btn { position: absolute; z-index: 10; } /* CRITICAL FIX */
+.ad-icon { width: 48px; height: 48px; margin-right: 15px; flex-shrink: 0; }
+.gremlin-ad .ad-content { display: flex; align-items: center; }
+.misleading-x-ad .fake-x-btn { opacity: 0.5; }
+.misleading-x-ad .real-x-btn { font-size: 10px; padding: 1px 3px; background-color: #444; color: #aaa; border: 1px solid #666; margin-left: 10px; }
+.misleading-x-ad .real-x-btn:hover { background-color: var(--success-color); color: #000; border-color: var(--success-color); }
 .chat-ad { width: 380px; }
 .chat-ad .ad-header { background-color: rgba(0, 255, 106, 0.1); border-color: var(--success-color); }
 .chat-ad .chat-log { height: 180px; background: rgba(0,0,0,0.3); padding: 10px; overflow-y: auto; border-radius: 4px; margin-bottom: 10px; font-size: 14px; }
@@ -87,7 +92,6 @@ body { background-color: var(--background-color); color: var(--text-color); font
 .survey-ad .survey-progress { display: flex; justify-content: center; gap: 10px; margin-top: 15px; }
 .survey-ad .progress-dot { width: 12px; height: 12px; border-radius: 50%; background: #555; border: 1px solid var(--secondary-color); }
 .survey-ad .progress-dot.complete { background: var(--warning-color); }
-/* Other ad styles would be updated similarly... */
 
 /* --- Powerups --- */
 .power-up { position: absolute; width: 50px; height: 50px; border-radius: 50%; cursor: pointer; background-size: 60%; background-position: center; background-repeat: no-repeat; transition: transform 0.2s ease; animation: pop-in 0.3s, pulse-glow 2s infinite; display: flex; justify-content: center; align-items: center; }
