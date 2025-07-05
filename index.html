@@ -1,1 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ad Invaders</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Comic+Sans+MS&display=swap" rel="stylesheet">
+</head>
+<body>
 
+    <div class="page-wrapper">
+        <header>
+            <h1>Ad Invaders</h1>
+            <p>The Internet is Attacking! Survive the Onslaught of Annoying Ads.</p>
+        </header>
+
+        <div id="game-container">
+            <!-- Game elements will be injected here by JavaScript -->
+            <div id="player-cursor"></div>
+            <div id="player-shield"></div>
+        </div>
+
+        <div id="ui-bar">
+            <div class="ui-element">
+                <span>HEALTH</span>
+                <div id="health-bar-container">
+                    <div id="health-bar"></div>
+                </div>
+            </div>
+            <div class="ui-element">
+                <span>SCORE:</span> <span id="score-value">0</span>
+            </div>
+            <div class="ui-element">
+                <span>WAVE:</span> <span id="wave-value">0</span>
+            </div>
+        </div>
+        
+        <!-- Game Screens -->
+        <div id="start-screen" class="screen">
+            <div class="screen-content">
+                <h2>Welcome to Ad Invaders</h2>
+                <p><strong>Your mouse cursor is your only weapon.</strong></p>
+                <ul>
+                    <li><strong>Left-Click:</strong> Click 'X' or 'Skip Ad' buttons to destroy ads.</li>
+                    <li><strong>Right-Click:</strong> Activate a temporary shield to block damage.</li>
+                </ul>
+                <p>Mis-clicks and touching ads will damage you. Survive as long as you can!</p>
+                <button id="start-button">Start Surviving</button>
+            </div>
+        </div>
+
+        <div id="game-over-screen" class="screen" style="display: none;">
+            <div class="screen-content">
+                <h2>GAME OVER</h2>
+                <p>The ads have consumed you.</p>
+                <p>Final Score: <span id="final-score">0</span></p>
+                <p>Survived Waves: <span id="final-wave">0</span></p>
+                <button id="restart-button">Try Again</button>
+            </div>
+        </div>
+
+        <footer>
+            <p>A game by You & a helpful AI. | This area is for *real* ads, keeping the game clean!</p>
+        </footer>
+    </div>
+
+    <!-- Optional Sound FX -->
+    <audio id="sfx-click" src="https://www.myinstants.com/media/sounds/mouse-click.mp3" preload="auto"></audio>
+    <audio id="sfx-error" src="https://www.myinstants.com/media/sounds/erro.mp3" preload="auto"></audio>
+    <audio id="sfx-shield" src="https://www.myinstants.com/media/sounds/sonic_ring.mp3" preload="auto"></audio>
+    <audio id="sfx-damage" src="https://www.myinstants.com/media/sounds/roblox-death-sound_1.mp3" preload="auto"></audio>
+    <audio id="sfx-destroy" src="https://www.myinstants.com/media/sounds/explosion_1.mp3" preload="auto"></audio>
+    <audio id="sfx-bomb" src="https://www.myinstants.com/media/sounds/explosion.mp3" preload="auto"></audio>
+
+
+    <script src="game.js"></script>
+</body>
+</html>
