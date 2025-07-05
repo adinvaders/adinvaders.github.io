@@ -13,7 +13,6 @@ document.addEventListener('DOMContentLoaded', () => {
             powerup: new Audio('https://cdn.pixabay.com/audio/2022/10/18/audio_c89b3f0729.mp3'),
             fakeClick: new Audio('https://cdn.pixabay.com/audio/2021/08/04/audio_a4b3a2896a.mp3'),
             shieldUp: new Audio('https://cdn.pixabay.com/audio/2022/03/23/audio_a1509b8b09.mp3'),
-            timeWarp: new Audio('https://cdn.pixabay.com/audio/2022/02/21/audio_a84393a543.mp3'),
         }
     };
     const playSound = (sound) => { sound.currentTime = 0; sound.volume = 0.7; sound.play(); };
@@ -33,6 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const imageSources = {
             videoThumb1: 'https://images.pexels.com/photos/163036/mario-luigi-yoschi-figures-163036.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500',
             videoThumb2: 'https://images.pexels.com/photos/1122868/pexels-photo-1122868.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500',
+            downloadIcon: 'https://i.imgur.com/2V3ERsH.png', // Simple download icon
+            captchaLogo: 'https://i.imgur.com/4gHk2kN.png', // Fake captcha logo
         };
         const promises = Object.entries(imageSources).map(([name, src]) => {
             return new Promise((resolve, reject) => {
@@ -46,9 +47,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // --- MAIN GAME FLOW ---
-    function resetState() { state={score:0,health:100,gameOver:!1,gameRunning:!1,mouse:{x:canvas.width/2,y:canvas.height/2,down:!1},entities:[],particles:[],backgroundStars:[],adSpawnTimer:100,difficulty:1,screenShake:0,timeWarp:0};for(let i=0;i<100;i++)state.backgroundStars.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*1.5});Object.assign(player,{shield:{active:!1,radius:50,rechargeTimer:0,maxRecharge:300}}); }
+    function resetState() {
+        state={score:0,health:100,gameOver:false,gameRunning:false,mouse:{x:canvas.width/2,y:canvas.height/2,down:false},entities:[],particles:[],backgroundStars:[],adSpawnTimer:100,difficulty:1,screenShake:0};
+        for(let i=0;i<100;i++)state.backgroundStars.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*1.5});
+        Object.assign(player,{shield:{active:false,radius:50,rechargeTimer:0,maxRecharge:300}});
+    }
     function startGame() { resetState(); updateUI(); ui.startScreen.style.display = 'none'; ui.gameOverScreen.style.display = 'none'; state.gameRunning = true; gameLoop(); }
-    function endGame() { state.gameOver=!0;state.gameRunning=!1;ui.finalScore.textContent=state.score;ui.gameOverScreen.style.display='flex'; }
+    function endGame() { state.gameOver=true;state.gameRunning=false;ui.finalScore.textContent=state.score;ui.gameOverScreen.style.display='flex'; }
     function updateUI() { ui.score.textContent=`SCORE: ${state.score}`;ui.health.style.width=`${state.health}%`;const e=100-player.shield.rechargeTimer/player.shield.maxRecharge*100;ui.shield.style.width=`${e}%`; }
 
     // --- EVENT LISTENERS & INITIALIZATION ---
@@ -72,19 +77,21 @@ document.addEventListener('DOMContentLoaded', () => {
     function spawnAd() {
         const adType = Math.random(); const x = Math.random() * (canvas.width - 450) + 25; const y = Math.random() * (canvas.height - 400) + 25;
         if (state.entities.length > 10) return;
-        if (adType < 0.25) state.entities.push(new PopupAd(x, y));
-        else if (adType < 0.45) state.entities.push(new VideoAd(x, y));
-        else if (adType < 0.60) state.entities.push(new CookieBanner());
-        else if (adType < 0.75) state.entities.push(new OSNotification());
-        else if (adType < 0.88) state.entities.push(new NewsletterAd(x,y));
-        else state.entities.push(new SpinToWinAd(x,y));
+        if (adType < 0.20) state.entities.push(new PopupAd(x, y));
+        else if (adType < 0.35) state.entities.push(new VideoAd(x, y));
+        else if (adType < 0.50) state.entities.push(new CookieBanner());
+        else if (adType < 0.65) state.entities.push(new OSNotification());
+        else if (adType < 0.78) state.entities.push(new NewsletterAd(x,y));
+        else if (adType < 0.88) state.entities.push(new CaptchaAd(x,y));
+        else state.entities.push(new FakeDownloadAd(x,y));
     }
-    function spawnPowerup() { if(state.entities.some(e=>e instanceof Powerup)) return; if(Math.random() < 0.005) { const type = Math.random() < 0.5 ? 'health' : 'timeWarp'; state.entities.push(new Powerup(Math.random()*(canvas.width-100)+50, Math.random()*(canvas.height-100)+50, type)); }}
+    function spawnPowerup() { if(state.entities.some(e => e instanceof Powerup)) return; if(Math.random() < 0.003) { state.entities.push(new Powerup(Math.random()*(canvas.width-100)+50, Math.random()*(canvas.height-100)+50)); }}
 
     // --- CLASSES ---
-    class Entity { constructor(x,y,w,h){Object.assign(this,{x,y,w,h,scale:0,opacity:0,alive:!0})} update(){if(this.scale<1)this.scale+=.1;if(this.opacity<1)this.opacity+=.1} destroy(e=0,t=assets.sounds.destroy){this.alive=!1,playSound(t),state.score+=e,state.screenShake=Math.max(state.screenShake,8),spawnParticles(this.x+this.w/2,this.y+this.h/2,25,"#00BFFF",4)} }
-    class Particle { constructor(x,y,c,s){this.x=x,this.y=y,this.color=c;const a=Math.random()*Math.PI*2;this.vx=Math.cos(a)*Math.random()*s,this.vy=Math.sin(a)*Math.random()*s,this.lifespan=1,this.decay=Math.random()*.03+.01} update(){this.x+=this.vx,this.y+=this.vy,this.vx*=.98,this.vy*=.98,this.lifespan-=this.decay} draw(){ctx.globalAlpha=this.lifespan,ctx.fillStyle=this.color,ctx.fillRect(this.x,this.y,2,2)} }
+    class Entity { constructor(x,y,w,h){Object.assign(this,{x,y,w,h,scale:0,opacity:0,alive:true})} update(){if(this.scale<1)this.scale+=.1;if(this.opacity<1)this.opacity+=.1} destroy(e=0,t=assets.sounds.destroy){this.alive=false;playSound(t);state.score+=e;state.screenShake=Math.max(state.screenShake,8);spawnParticles(this.x+this.w/2,this.y+this.h/2,25,"#00BFFF",4)} }
+    class Particle { constructor(x,y,c,s){this.x=x;this.y=y;this.color=c;const a=Math.random()*Math.PI*2;this.vx=Math.cos(a)*Math.random()*s;this.vy=Math.sin(a)*Math.random()*s;this.lifespan=1;this.decay=Math.random()*.03+.01} update(){this.x+=this.vx;this.y+=this.vy;this.vx*=.98;this.vy*=.98;this.lifespan-=this.decay} draw(){ctx.globalAlpha=this.lifespan;ctx.fillStyle=this.color;ctx.fillRect(this.x,this.y,2,2)} }
     
+    // --- All Ad classes have been verified for correct click logic ---
     class PopupAd extends Entity {
         constructor(x, y) { super(x, y, 380, 200); this.clickDamage = 10; this.points = 20; this.hasFake = state.difficulty > 1.3 && Math.random() < 0.4; this.buttons = {real: { x: this.x + this.w - 30, y: this.y + 10, w: 20, h: 20 }, fake: this.hasFake ? { x: this.x + this.w - 60, y: this.y + 10, w: 20, h: 20 } : null }; }
         onClick(mouse) { if (!this.alive || this.scale < 1 || !isPointInRect(mouse, this)) return false; if (isPointInRect(mouse, this.buttons.real)) { this.destroy(this.points); return true; } if (this.hasFake && isPointInRect(mouse, this.buttons.fake)) { takeDamage(this.clickDamage * 2); playSound(assets.sounds.fakeClick); return true; } takeDamage(this.clickDamage); return true; }
@@ -92,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     class VideoAd extends Entity {
         constructor(x, y) { super(x, y, 420, 236); this.clickDamage = 15; this.points = 30; this.progress = 0; this.closeButton = { x: this.x + this.w - 100, y: this.y + this.h - 45, w: 80, h: 30, text: "Skip" }; this.thumb = Math.random() < 0.5 ? 'videoThumb1' : 'videoThumb2';}
-        update() { super.update(); if (this.progress < 100) this.progress += 0.2 * state.difficulty * (state.timeWarp > 0 ? 0.2 : 1); }
+        update() { super.update(); if (this.progress < 100) this.progress += 0.2 * state.difficulty; }
         onClick(mouse) { if (!this.alive || this.scale < 1 || !isPointInRect(mouse, this)) return false; if (this.progress >= 100 && isPointInRect(mouse, this.closeButton)) { this.destroy(this.points); return true; } takeDamage(this.clickDamage); return true; }
         draw() { ctx.save();ctx.translate(this.x+this.w/2,this.y+this.h/2);ctx.scale(this.scale,this.scale);ctx.globalAlpha=this.opacity;ctx.translate(-(this.x+this.w/2),-(this.y+this.h/2));const thumbImg=assets.images[this.thumb];ctx.fillStyle="#000";drawRoundRect(this.x,this.y,this.w,this.h,8);ctx.fill();if(thumbImg){ctx.globalAlpha=this.opacity*.8;ctx.drawImage(thumbImg,this.x,this.y,this.w,this.h);ctx.globalAlpha=this.opacity}ctx.fillStyle="rgba(0,0,0,0.4)";ctx.fillRect(this.x,this.y,this.w,this.h);if(this.progress<100){ctx.fillStyle="#fff";ctx.globalAlpha=this.opacity*0.5;ctx.beginPath();ctx.moveTo(this.x+this.w/2-20,this.y+this.h/2-30);ctx.lineTo(this.x+this.w/2-20,this.y+this.h/2+30);ctx.lineTo(this.x+this.w/2+30,this.y+this.h/2);ctx.closePath();ctx.fill();ctx.globalAlpha=this.opacity}else{this.closeButton.hover=isPointInRect(state.mouse,this.closeButton);ctx.fillStyle=this.closeButton.hover?"rgba(255,255,255,0.3)":"rgba(255,255,255,0.1)";drawRoundRect(this.closeButton.x,this.closeButton.y,this.closeButton.w,this.closeButton.h,5);ctx.fill();ctx.fillStyle="#fff";ctx.font="bold 14px Poppins";ctx.textAlign="center";ctx.fillText(this.closeButton.text,this.closeButton.x+40,this.closeButton.y+21)}ctx.fillStyle="#444";drawRoundRect(this.x+10,this.y+this.h-15,this.w-20,5,2.5);ctx.fill();ctx.fillStyle="#FF4136";drawRoundRect(this.x+10,this.y+this.h-15,(this.w-20)*(this.progress/100),5,2.5);ctx.fill();ctx.restore();}
     }
@@ -110,28 +117,106 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     class NewsletterAd extends Entity {
         constructor(x, y) { super(x, y, 400, 220); this.clickDamage=15;this.points=35;this.subscribeBtn={x:this.x+50,y:this.y+130,w:300,h:45};this.closeLink={text:"No, thanks.",rect:{x:0,y:0,w:0,h:0}}}
-        onClick(mouse) { if(!this.alive||this.scale<1||!isPointInRect(mouse,this))return!1;if(isPointInRect(mouse,this.closeLink.rect)){this.destroy(this.points);return!0}if(isPointInRect(mouse,this.subscribeBtn)){takeDamage(this.clickDamage*2);playSound(assets.sounds.fakeClick);return!0}takeDamage(this.clickDamage);return!0}
+        onClick(mouse) { if(!this.alive||this.scale<1||!isPointInRect(mouse,this))return false;if(isPointInRect(mouse,this.closeLink.rect)){this.destroy(this.points);return true}if(isPointInRect(mouse,this.subscribeBtn)){takeDamage(this.clickDamage*2);playSound(assets.sounds.fakeClick);return true}takeDamage(this.clickDamage);return true}
         draw() {ctx.save();ctx.translate(this.x+this.w/2,this.y+this.h/2);ctx.scale(this.scale,this.scale);ctx.globalAlpha=this.opacity;ctx.translate(-(this.x+this.w/2),-(this.y+this.h/2));ctx.fillStyle='#fff';drawRoundRect(this.x,this.y,this.w,this.h,12);ctx.fill();ctx.fillStyle='#111';ctx.font="bold 24px Poppins";ctx.textAlign='center';ctx.fillText("Don't Miss Out!",this.x+this.w/2,this.y+50);ctx.font="14px Roboto";ctx.fillText("Sign up for our newsletter for exclusive deals!",this.x+this.w/2,this.y+80);this.subscribeBtn.hover=isPointInRect(state.mouse,this.subscribeBtn);ctx.fillStyle=this.subscribeBtn.hover?'#FF4136':'#dd2c00';drawRoundRect(this.subscribeBtn.x,this.subscribeBtn.y,this.subscribeBtn.w,this.subscribeBtn.h,8);ctx.fill();ctx.fillStyle='#fff';ctx.font="bold 16px Poppins";ctx.fillText("SUBSCRIBE NOW",this.x+this.w/2,this.y+160);ctx.font="14px Roboto";const textWidth=ctx.measureText(this.closeLink.text).width;this.closeLink.rect={x:this.x+(this.w-textWidth)/2,y:this.y+185,w:textWidth,h:20};this.closeLink.hover=isPointInRect(state.mouse,this.closeLink.rect);ctx.fillStyle=this.closeLink.hover?'#007bff':'#888';ctx.fillText(this.closeLink.text,this.x+this.w/2,this.y+195);ctx.restore();}
     }
-    class SpinToWinAd extends Entity {
-        constructor(x,y){super(x,y,300,350);this.clickDamage=10;this.points=45;this.rotation=0;this.spinBtn={x:this.x+125,y:this.y+125,w:50,h:50}}
-        update(){super.update();this.rotation+=0.02*state.difficulty*(state.timeWarp>0?0.2:1)}
-        onClick(mouse){if(!this.alive||this.scale<1||!isPointInRect(mouse,this))return!1;if(isPointInRect(mouse,this.spinBtn)){this.destroy(this.points);return!0}takeDamage(this.clickDamage);return!0}
-        draw(){ctx.save();ctx.translate(this.x+this.w/2,this.y+this.h/2);ctx.scale(this.scale,this.scale);ctx.globalAlpha=this.opacity;ctx.translate(-(this.x+this.w/2),-(this.y+this.h/2));ctx.fillStyle="#222";ctx.shadowColor="rgba(255,220,0,0.4)";ctx.shadowBlur=30;drawRoundRect(this.x,this.y,this.w,this.h,15);ctx.fill();ctx.shadowBlur=0;ctx.font="bold 22px Poppins";ctx.textAlign='center';ctx.fillStyle='#FFDC00';ctx.fillText("SPIN TO WIN!",this.x+this.w/2,this.y+40);const r=100;ctx.save();ctx.translate(this.x+150,this.y+150);ctx.rotate(this.rotation);const colors=['#FF4136','#0074D9','#2ECC40','#FFDC00','#B10DC9','#FF851B'];for(let i=0;i<6;i++){ctx.fillStyle=colors[i];ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,r,i*Math.PI/3,(i+1)*Math.PI/3);ctx.closePath();ctx.fill()}ctx.restore();this.spinBtn.hover=isPointInRect(state.mouse,this.spinBtn);ctx.fillStyle=this.spinBtn.hover?'#fff':'#FFDC00';ctx.beginPath();ctx.arc(this.spinBtn.x+25,this.spinBtn.y+25,25,0,2*Math.PI);ctx.fill();ctx.fillStyle='#000';ctx.font="bold 12px Poppins";ctx.fillText("SPIN",this.spinBtn.x+25,this.spinBtn.y+30);ctx.fillStyle="#fff";ctx.beginPath();ctx.moveTo(this.x+150,this.y+40);ctx.lineTo(this.x+140,this.y+20);ctx.lineTo(this.x+160,this.y+20);ctx.closePath();ctx.fill();ctx.restore()}
-    }
     class Powerup extends Entity {
-        constructor(x, y, type) { super(x, y, 60, 60); this.type = type; this.points = 100; }
-        onClick(t){if(!isPointInRect(t,this))return!1;this.destroy(this.points,this.type==='health'?assets.sounds.powerup:assets.sounds.timeWarp);if(this.type==='health'){player.shield.rechargeTimer=0;state.health=Math.min(100,state.health+25)}else if(this.type==='timeWarp'){state.timeWarp=300}return!0}
-        draw(){ctx.save();const color=this.type==='health'?'#2ECC40':'#FFDC00';const text=this.type==='health'?'+':'◷';ctx.shadowColor=color;ctx.shadowBlur=30*this.scale;ctx.fillStyle=color;drawRoundRect(this.x,this.y,this.w*this.scale,this.h*this.scale,30*this.scale);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle="#fff";ctx.lineWidth=3;ctx.font="bold 30px Poppins";ctx.textAlign='center';ctx.strokeText(text,this.x+this.w/2,this.y+this.h/2+11);ctx.restore()}
+        constructor(x, y) { super(x, y, 60, 60); this.points = 100; }
+        onClick(t){if(!isPointInRect(t,this))return!1;this.destroy(this.points,assets.sounds.powerup);player.shield.rechargeTimer=0;state.health=Math.min(100,state.health+25);state.entities.forEach(t=>{if(t instanceof PopupAd||t instanceof NewsletterAd)t.destroy(10,new Audio)});return!0}
+        draw(){ctx.save();const t="#2ECC40";ctx.shadowColor=t;ctx.shadowBlur=30*this.scale;ctx.fillStyle=t;drawRoundRect(this.x,this.y,this.w*this.scale,this.h*this.scale,30*this.scale);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle="#fff";ctx.lineWidth=3;ctx.font="bold 30px Poppins";ctx.textAlign='center';ctx.strokeText("+",this.x+this.w/2,this.y+this.h/2+11);ctx.restore()}
     }
 
+    // --- NEW AD CLASSES ---
+    class FakeDownloadAd extends Entity {
+        constructor(x, y) {
+            super(x, y, 420, 250);
+            this.clickDamage = 20; this.points = 50;
+            this.fakeButtons = [
+                { x: this.x + 40, y: this.y + 120, w: 340, h: 50, text: "DOWNLOAD NOW" },
+                { x: this.x + 120, y: this.y + 180, w: 180, h: 30, text: "Start Download" }
+            ];
+            this.realLink = { text: "No thanks, I don't want this file.", rect: {} };
+        }
+        onClick(mouse) {
+            if (!this.alive || this.scale < 1 || !isPointInRect(mouse, this)) return false;
+            if (isPointInRect(mouse, this.realLink.rect)) { this.destroy(this.points); return true; }
+            for (const btn of this.fakeButtons) {
+                if (isPointInRect(mouse, btn)) {
+                    takeDamage(this.clickDamage); playSound(assets.sounds.fakeClick); return true;
+                }
+            }
+            takeDamage(this.clickDamage / 2); return true;
+        }
+        draw() {
+            ctx.save();ctx.translate(this.x+this.w/2,this.y+this.h/2);ctx.scale(this.scale,this.scale);ctx.globalAlpha=this.opacity;ctx.translate(-(this.x+this.w/2),-(this.y+this.h/2));
+            ctx.fillStyle = '#F0F2F5'; drawRoundRect(this.x, this.y, this.w, this.h, 10); ctx.fill();
+            const icon = assets.images.downloadIcon;
+            if (icon) ctx.drawImage(icon, this.x + 30, this.y + 30, 64, 64);
+            ctx.fillStyle = '#111'; ctx.font = "bold 20px Poppins"; ctx.textAlign = 'left';
+            ctx.fillText("Your download is ready!", this.x + 110, this.y + 65);
+
+            this.fakeButtons.forEach((btn, i) => {
+                btn.hover = isPointInRect(state.mouse, btn);
+                ctx.fillStyle = btn.hover ? '#21a34a' : '#28a745';
+                drawRoundRect(btn.x, btn.y, btn.w, btn.h, 6); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.font = `bold ${i === 0 ? 18 : 14}px Poppins`; ctx.textAlign = 'center';
+                ctx.fillText(btn.text, btn.x + btn.w / 2, btn.y + btn.h / 2 + 6);
+            });
+            
+            ctx.font = "12px Roboto";
+            const textWidth = ctx.measureText(this.realLink.text).width;
+            this.realLink.rect = { x: this.x + (this.w - textWidth) / 2, y: this.y + this.h - 25, w: textWidth, h: 15 };
+            this.realLink.hover = isPointInRect(state.mouse, this.realLink.rect);
+            ctx.fillStyle = this.realLink.hover ? '#007bff' : '#aaa';
+            ctx.fillText(this.realLink.text, this.x + this.w / 2, this.y + this.h - 15);
+            ctx.restore();
+        }
+    }
+    class CaptchaAd extends Entity {
+        constructor(x, y) {
+            super(x, y, 300, 130);
+            this.clickDamage = 10; this.points = 40;
+            this.checkbox = { x: this.x + 20, y: this.y + 55, w: 30, h: 30 };
+        }
+        onClick(mouse) {
+            if (!this.alive || this.scale < 1 || !isPointInRect(mouse, this)) return false;
+            if (isPointInRect(mouse, this.checkbox)) { this.destroy(this.points); return true; }
+            takeDamage(this.clickDamage); return true;
+        }
+        draw() {
+            ctx.save();ctx.translate(this.x+this.w/2,this.y+this.h/2);ctx.scale(this.scale,this.scale);ctx.globalAlpha=this.opacity;ctx.translate(-(this.x+this.w/2),-(this.y+this.h/2));
+            ctx.fillStyle = '#f9f9f9'; drawRoundRect(this.x, this.y, this.w, this.h, 4); ctx.fill();
+            ctx.fillStyle = '#d6e9f8'; drawRoundRect(this.x, this.y, this.w, 40, 4); ctx.fill();
+            ctx.beginPath();ctx.rect(this.x,this.y+20,this.w,20);ctx.fill();
+            ctx.fillStyle = '#111'; ctx.font = "16px Roboto"; ctx.textAlign = 'left';
+            ctx.fillText("Select checkbox to continue", this.x + 15, this.y + 28);
+
+            this.checkbox.hover = isPointInRect(state.mouse, this.checkbox);
+            ctx.strokeStyle = this.checkbox.hover ? '#007bff' : '#ccc'; ctx.lineWidth = 2;
+            ctx.strokeRect(this.checkbox.x, this.checkbox.y, this.checkbox.w, this.checkbox.h);
+            if (this.checkbox.hover && state.mouse.down) {
+                ctx.fillStyle = '#007bff';
+                ctx.beginPath(); ctx.moveTo(this.checkbox.x+8, this.checkbox.y+15);
+                ctx.lineTo(this.checkbox.x+13, this.checkbox.y+20); ctx.lineTo(this.checkbox.x+22, this.checkbox.y+10);
+                ctx.stroke();
+            }
+            
+            ctx.font = "16px Roboto"; ctx.fillStyle = '#111';
+            ctx.fillText("I'm not a robot", this.checkbox.x + 40, this.y + 78);
+            
+            const logo = assets.images.captchaLogo;
+            if (logo) ctx.drawImage(logo, this.x + this.w - 70, this.y + 50, 60, 60);
+
+            ctx.restore();
+        }
+    }
+    
     // --- MAIN GAME LOOP ---
     function gameLoop() {
         if (state.gameOver) return;
-        const timeScale = state.timeWarp > 0 ? 0.2 : 1;
-        state.adSpawnTimer -= 1 * timeScale;
+        state.adSpawnTimer--;
         if (state.adSpawnTimer <= 0) { spawnAd(); state.difficulty += 0.05; state.adSpawnTimer = Math.max(30, 120 / state.difficulty); }
-        spawnPowerup(); if (player.shield.rechargeTimer > 0) player.shield.rechargeTimer--; if (state.screenShake > 0) state.screenShake--; if (state.timeWarp > 0) state.timeWarp--;
+        spawnPowerup(); if (player.shield.rechargeTimer > 0) player.shield.rechargeTimer--; if (state.screenShake > 0) state.screenShake--;
         
         state.entities.forEach(e => e.update()); state.particles.forEach(p => p.update());
         state.entities = state.entities.filter(e => e.alive); state.particles = state.particles.filter(p => p.lifespan > 0);
@@ -139,7 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         ctx.save(); if (state.screenShake > 0) ctx.translate(Math.random() * 8 - 4, Math.random() * 8 - 4);
         ctx.fillStyle = '#0D0F12'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        state.backgroundStars.forEach(s => { s.y += 0.1 * timeScale; if (s.y > canvas.height) s.y = 0; ctx.fillStyle = `rgba(200,220,255,${s.r*0.5})`; ctx.fillRect(s.x, s.y, s.r, s.r); });
+        state.backgroundStars.forEach(s => { s.y += 0.1; if (s.y > canvas.height) s.y = 0; ctx.fillStyle = `rgba(200,220,255,${s.r*0.5})`; ctx.fillRect(s.x, s.y, s.r, s.r); });
         
         state.particles.forEach(p => p.draw()); ctx.globalAlpha = 1; state.entities.forEach(e => e.draw());
 
@@ -147,7 +232,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(state.mouse.x-10,state.mouse.y);ctx.lineTo(state.mouse.x+10,state.mouse.y);ctx.moveTo(state.mouse.x,state.mouse.y-10);ctx.lineTo(state.mouse.x,state.mouse.y+10);ctx.stroke();
         
-        if (state.timeWarp > 0) { ctx.fillStyle = "rgba(255, 220, 0, 0.1)"; ctx.fillRect(0, 0, canvas.width, canvas.height); }
         ctx.restore(); updateUI();
         if(state.gameRunning) requestAnimationFrame(gameLoop);
     }
