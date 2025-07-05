@@ -2,391 +2,392 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- SETUP ---
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 900; canvas.height = 700;
+    canvas.width = 1000; canvas.height = 800;
 
     // --- UI & AUDIO ---
-    const scoreDisplay = document.getElementById('score-display');
-    const healthBar = document.getElementById('health-bar-inner');
-    const shieldBar = document.getElementById('shield-bar-inner');
-    const startScreen = document.getElementById('start-screen'), gameOverScreen = document.getElementById('game-over-screen');
-    const startButton = document.getElementById('startButton'), restartButton = document.getElementById('restartButton');
-    const finalScoreDisplay = document.getElementById('finalScore');
-    const sounds = {
-        hit: new Audio('https://www.zapsplat.com/wp-content/uploads/2015/sound-effects-the-sound-pack-tree/tspt_computer_mouse_click_single_002.mp3'),
-        destroy: new Audio('https://www.zapsplat.com/wp-content/uploads/2015/sound-effects-BFG-sound-effects/BFG_ui_generic_button_click_delete_hard_001.mp3'),
-        damage: new Audio('https://www.zapsplat.com/wp-content/uploads/2015/sound-effects-four-stones/fs_ui_jingle_negative_02_082.mp3'),
-        powerup: new Audio('https://www.zapsplat.com/wp-content/uploads/2015/sound-effects-four-stones/fs_ui_jingle_positive_01_091.mp3'),
-        fakeClick: new Audio('https://www.zapsplat.com/wp-content/uploads/2015/sound-effects-46416/zapsplat_multimedia_button_press_plastic_click_002_47805.mp3')
+    const ui = {
+        score: document.getElementById('score-display'),
+        health: document.getElementById('health-bar-inner'),
+        shield: document.getElementById('shield-bar-inner'),
+        startScreen: document.getElementById('start-screen'),
+        gameOverScreen: document.getElementById('game-over-screen'),
+        startButton: document.getElementById('startButton'),
+        restartButton: document.getElementById('restartButton'),
+        finalScore: document.getElementById('finalScore'),
     };
-    const playSound = (sound) => sound.cloneNode().play();
+    const sounds = {
+        destroy: new Audio('https://cdn.pixabay.com/audio/2022/03/15/audio_731c518838.mp3'),
+        damage: new Audio('https://cdn.pixabay.com/audio/2022/11/22/audio_7532328a38.mp3'),
+        powerup: new Audio('https://cdn.pixabay.com/audio/2022/10/18/audio_c89b3f0729.mp3'),
+        fakeClick: new Audio('https://cdn.pixabay.com/audio/2021/08/04/audio_a4b3a2896a.mp3'),
+        shieldUp: new Audio('https://cdn.pixabay.com/audio/2022/03/23/audio_a1509b8b09.mp3'),
+    };
+    const playSound = (sound) => { sound.currentTime = 0; sound.play(); };
 
     // --- GAME STATE & PLAYER ---
-    let state = {};
-    const player = { shield: {}, powerups: {} };
+    let state = {}; const player = { shield: {}, powerups: {} };
 
+    // --- DRAWING HELPERS ---
+    const drawRoundRect = (x, y, w, h, r) => {
+        if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2;
+        ctx.beginPath(); ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+    };
+
+    // --- MAIN GAME FLOW ---
     function resetState() {
         state = {
             score: 0, health: 100, gameOver: false, gameRunning: false,
-            mouse: { x: canvas.width / 2, y: canvas.height / 2, targetX: canvas.width / 2, targetY: canvas.height / 2 },
-            ads: [], powerups: [], particles: [],
-            adSpawnTimer: 120, difficultyMultiplier: 1,
-            targetSlowdown: 0, currentSlowdown: 0,
-            damageFlash: 0
+            mouse: { x: canvas.width / 2, y: canvas.height / 2, down: false },
+            entities: [], particles: [], backgroundStars: [],
+            adSpawnTimer: 100, difficulty: 1, screenShake: 0
         };
+        for (let i=0; i<100; i++) state.backgroundStars.push({x:Math.random()*canvas.width, y:Math.random()*canvas.height, r:Math.random()*1.5});
         Object.assign(player, {
-            shield: { active: false, autoActive: false, autoDuration: 0, radius: 40, rechargeTimer: 0, maxRecharge: 250 },
+            shield: { active: false, radius: 50, rechargeTimer: 0, maxRecharge: 300 },
             powerups: { superClick: false }
         });
     }
-
-    // --- EVENT LISTENERS ---
-    canvas.addEventListener('mousemove', e => {
-        const rect = canvas.getBoundingClientRect();
-        state.mouse.targetX = e.clientX - rect.left;
-        state.mouse.targetY = e.clientY - rect.top;
-    });
-    canvas.addEventListener('mousedown', e => {
-        e.preventDefault();
-        if (e.button === 0) handleLeftClick();
-        if (e.button === 2 && player.shield.rechargeTimer <= 0 && !player.shield.autoActive) player.shield.active = true;
-    });
-    canvas.addEventListener('mouseup', e => {
-        e.preventDefault();
-        if (e.button === 2 && player.shield.active) {
-            player.shield.active = false;
-            player.shield.rechargeTimer = player.shield.maxRecharge;
-        }
-    });
-    canvas.addEventListener('contextmenu', e => e.preventDefault());
-    startButton.addEventListener('click', startGame);
-    restartButton.addEventListener('click', startGame);
-
-    // --- GAME FLOW & UI ---
     function startGame() {
-        resetState();
-        updateUI();
-        startScreen.style.display = 'none';
-        gameOverScreen.style.display = 'none';
-        state.gameRunning = true;
-        gameLoop();
+        resetState(); updateUI();
+        ui.startScreen.style.display = 'none'; ui.gameOverScreen.style.display = 'none';
+        state.gameRunning = true; gameLoop();
     }
     function endGame() {
         state.gameOver = true; state.gameRunning = false;
-        finalScoreDisplay.textContent = state.score;
-        gameOverScreen.style.display = 'flex';
+        ui.finalScore.textContent = state.score; ui.gameOverScreen.style.display = 'flex';
     }
     function updateUI() {
-        scoreDisplay.textContent = `SCORE: ${state.score}`;
-        healthBar.style.width = `${state.health}%`;
+        ui.score.textContent = `SCORE: ${state.score}`;
+        ui.health.style.width = `${state.health}%`;
         const shieldCharge = 100 - (player.shield.rechargeTimer / player.shield.maxRecharge) * 100;
-        shieldBar.style.width = `${shieldCharge}%`;
+        ui.shield.style.width = `${shieldCharge}%`;
     }
+
+    // --- EVENT LISTENERS ---
+    canvas.addEventListener('mousemove', e => { const rect = canvas.getBoundingClientRect(); state.mouse.x = e.clientX - rect.left; state.mouse.y = e.clientY - rect.top; });
+    canvas.addEventListener('mousedown', e => { e.preventDefault(); if (e.button === 0) { state.mouse.down = true; handleClick(); } if (e.button === 2) { if(player.shield.rechargeTimer<=0) {player.shield.active = true; playSound(sounds.shieldUp);}}});
+    canvas.addEventListener('mouseup', e => { e.preventDefault(); if (e.button === 0) state.mouse.down = false; if (e.button === 2) player.shield.active = false;});
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+    ui.startButton.addEventListener('click', startGame); ui.restartButton.addEventListener('click', startGame);
 
     // --- CORE MECHANICS ---
     function takeDamage(amount) {
-        if (player.shield.active || player.shield.autoActive) return;
+        if (player.shield.active) return;
         state.health = Math.max(0, state.health - amount);
-        playSound(sounds.damage);
-        state.damageFlash = 15; // Flash for 15 frames
-        updateUI();
-        if (state.health <= 0) endGame();
+        playSound(sounds.damage); state.screenShake = 15;
+        updateUI(); if (state.health <= 0) endGame();
     }
-    function createDestructionParticles(x, y, color) {
-        for (let i = 0; i < 20; i++) particles.push(new DestructionParticle(x, y, color));
-    }
-    function handleLeftClick() {
-        for (let i = state.powerups.length - 1; i >= 0; i--) {
-            if (isPointInRect(state.mouse, state.powerups[i])) {
-                state.powerups[i].activate(); state.powerups.splice(i, 1); return;
-            }
+    function spawnParticles(x, y, count, color, speed) { for (let i = 0; i < count; i++) state.particles.push(new Particle(x, y, color, speed)); }
+    function handleClick() {
+        // Handle entities in reverse order (top ones first)
+        for (let i = state.entities.length - 1; i >= 0; i--) {
+            const entity = state.entities[i];
+            if (entity.onClick && entity.onClick(state.mouse)) return; // Entity handled the click
         }
-        for (let i = state.ads.length - 1; i >= 0; i--) {
-            const ad = state.ads[i];
-            const superClickDestroy = player.powerups.superClick && isPointInRect(state.mouse, ad);
-            if (ad.fakeCloseButton && isPointInRect(state.mouse, ad.fakeCloseButton)) {
-                takeDamage(ad.clickDamage * 2); playSound(sounds.fakeClick); break;
-            }
-            if (superClickDestroy || (ad.closeButton && isPointInRect(state.mouse, ad.closeButton))) {
-                state.score += ad.points;
-                playSound(sounds.destroy);
-                createDestructionParticles(ad.x + ad.width / 2, ad.y + ad.height / 2, ad.color);
-                state.ads.splice(i, 1);
-                if (player.powerups.superClick) player.powerups.superClick = false;
-                break;
-            } else if (ad.takeHit && isPointInRect(state.mouse, ad)) {
-                ad.takeHit(); break;
-            } else if (isPointInRect(state.mouse, ad)) {
-                takeDamage(ad.clickDamage); playSound(sounds.hit); break;
-            }
-        }
-        updateUI();
     }
     function spawnAd() {
-        const adType = Math.random();
-        const x = Math.random() * (canvas.width - 400) + 20;
-        const y = Math.random() * (canvas.height - 300) + 20;
-
-        if (adType < 0.35) state.ads.push(new PopupAd(x, y, state.difficultyMultiplier));
-        else if (adType < 0.55) state.ads.push(new VideoAd(x, y));
-        else if (adType < 0.7) state.ads.push(new CookieConsentStack(x, y));
-        else if (adType < 0.85) state.ads.push(new FakeVirusAlert());
-        else state.ads.push(new BannerAd());
-    }
-    function spawnPowerup() {
-        if (state.powerups.length === 0 && Math.random() < 0.005) {
-            const x = Math.random() * (canvas.width - 60), y = Math.random() * (canvas.height - 60);
-            const type = ['BOMB', 'AUTO_SHIELD', 'SUPER_CLICK'][Math.floor(Math.random() * 3)];
-            state.powerups.push(new Powerup(x, y, type));
-        }
+        const adType = Math.random(); const x = Math.random() * (canvas.width - 450) + 25; const y = Math.random() * (canvas.height - 400) + 25;
+        if (adType < 0.4) state.entities.push(new PopupAd(x, y));
+        else if (adType < 0.6) state.entities.push(new VideoAd(x, y));
+        else if (adType < 0.75) state.entities.push(new CookieBanner());
+        else if (adType < 0.9) state.entities.push(new OSNotification());
+        else state.entities.push(new Powerup(Math.random()*(canvas.width-100)+50, Math.random()*(canvas.height-100)+50));
     }
     const isPointInRect = (point, rect) => point.x > rect.x && point.x < rect.x + rect.width && point.y > rect.y && point.y < rect.y + rect.height;
 
-    // --- CLASSES (REDESIGNED) ---
-    class PopupAd {
-        constructor(x, y, difficulty) {
-            this.x = x; this.y = y; this.width = 320; this.height = 180;
-            this.clickDamage = 5; this.points = 10; this.color = '#fff';
-            this.title = ["Congratulations!", "Claim Your Reward", "System Alert"][Math.floor(Math.random() * 3)];
-            this.message = ["You've been selected to receive a FREE gift card.", "Click now to claim an exclusive offer, limited time only.", "Your system requires an immediate security scan."][Math.floor(Math.random() * 3)];
-            // Harder difficulty introduces fake close buttons
-            this.hasFakeCloseButton = difficulty > 1.5 && Math.random() < 0.5;
-            if (this.hasFakeCloseButton) {
-                this.fakeCloseButton = { x: this.x + this.width - 28, y: this.y + 8, width: 20, height: 20 };
-                this.closeButton = { x: this.x + 5, y: this.y + 5, width: 10, height: 10 }; // Real one is tiny
-            } else {
-                this.closeButton = { x: this.x + this.width - 28, y: this.y + 8, width: 20, height: 20 };
-            }
-        }
-        update() {}
-        draw(ctx) {
-            ctx.fillStyle = this.color; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 20;
-            ctx.fillRect(this.x, this.y, this.width, this.height); ctx.shadowBlur = 0;
-            ctx.fillStyle = '#f0f0f0'; ctx.fillRect(this.x, this.y, this.width, 36);
-            ctx.fillStyle = '#333'; ctx.font = "bold 14px 'Inter'"; ctx.textAlign = 'left';
-            ctx.fillText(this.title, this.x + 15, this.y + 24);
-            ctx.font = "14px 'Inter'"; ctx.textAlign = 'center';
-            ctx.fillText(this.message, this.x + this.width / 2, this.y + 90);
-            
-            // Draw real close button
-            ctx.fillStyle = '#ddd';
-            ctx.fillRect(this.closeButton.x, this.closeButton.y, this.closeButton.width, this.closeButton.height);
-            ctx.strokeStyle = '#555'; ctx.lineWidth = this.hasFakeCloseButton ? 1 : 2; ctx.textAlign = 'center';
-            ctx.strokeText('X', this.closeButton.x + this.closeButton.width/2, this.closeButton.y + this.closeButton.height*0.75);
-            
-            // Draw fake one if it exists
-            if (this.hasFakeCloseButton) {
-                ctx.fillStyle = '#e8e8e8';
-                ctx.fillRect(this.fakeCloseButton.x, this.fakeCloseButton.y, this.fakeCloseButton.width, this.fakeCloseButton.height);
-                ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
-                ctx.strokeText('X', this.fakeCloseButton.x + 10, this.fakeCloseButton.y + 15);
-            }
-        }
-    }
-
-    class VideoAd {
-        constructor(x, y) {
-            this.x = x; this.y = y; this.width = 380; this.height = 210;
-            this.clickDamage = 10; this.points = 25; this.color = '#000';
-            this.progress = 0;
-            this.closeButton = { x: this.x + this.width - 95, y: this.y + this.height - 40, width: 80, height: 25 };
-        }
-        update() { this.progress = (this.progress + 0.2) % 100; }
-        draw(ctx) {
-            ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y, this.width, this.height);
-            ctx.font = "16px 'Inter'"; ctx.fillStyle = '#ccc'; ctx.textAlign = 'center';
-            ctx.fillText("An ad is playing...", this.x + this.width / 2, this.y + this.height / 2);
-            // Progress Bar
-            ctx.fillStyle = '#444'; ctx.fillRect(this.x + 10, this.y + this.height - 15, this.width - 20, 5);
-            ctx.fillStyle = '#ffcc00'; ctx.fillRect(this.x + 10, this.y + this.height - 15, (this.width - 20) * (this.progress/100), 5);
-            // Skip Button
-            ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(this.closeButton.x, this.closeButton.y, this.closeButton.width, this.closeButton.height);
-            ctx.fillStyle = '#aaa'; ctx.font = "12px 'Inter'";
-            ctx.fillText("Skip Ad >", this.closeButton.x + 40, this.closeButton.y + 17);
-        }
-    }
-
-    class CookieConsentStack {
-        constructor(x, y) {
-            this.x = x; this.y = y; this.width = 350; this.height = 160;
-            this.clickDamage = 2; this.points = 50; this.layers = 3;
-            this.slowFactor = 0.6; this.color = '#333842';
-            this.button = { x: this.x + 185, y: this.y + 105, width: 140, height: 35 };
-            this.messages = ["Accept All", "Confirm Preferences", "Acknowledge"];
-        }
-        takeHit() {
-            if (isPointInRect(state.mouse, this.button)) {
-                this.layers--; playSound(sounds.hit);
-                if (this.layers <= 0) {
-                    state.score += this.points; playSound(sounds.destroy);
-                    createDestructionParticles(this.x + this.width / 2, this.y + this.height / 2, this.color);
-                    state.ads = state.ads.filter(ad => ad !== this);
-                }
-            } else takeDamage(this.clickDamage);
+    // --- ENTITY & PARTICLE CLASSES ---
+    class Entity {
+        constructor(x, y, w, h) {
+            Object.assign(this, { x, y, w, h, scale: 0, opacity: 0, alive: true });
         }
         update() {
-            state.targetSlowdown = isPointInRect(state.mouse, this) ? this.slowFactor : 0;
+            if (this.scale < 1) this.scale += 0.1;
+            if (this.opacity < 1) this.opacity += 0.1;
         }
-        draw(ctx) {
-            ctx.fillStyle = this.color; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 20;
-            ctx.fillRect(this.x, this.y, this.width, this.height); ctx.shadowBlur = 0;
-            ctx.fillStyle = '#fff'; ctx.font = "bold 16px 'Poppins'"; ctx.textAlign = 'left';
-            ctx.fillText("We use cookies to enhance your experience.", this.x + 20, this.y + 40);
-            ctx.fillStyle = '#6c63ff'; ctx.fillRect(this.button.x, this.button.y, this.button.width, this.button.height);
-            ctx.fillStyle = 'white'; ctx.font = "bold 14px 'Inter'"; ctx.textAlign = 'center';
-            ctx.fillText(this.messages[this.layers - 1], this.button.x + this.button.width / 2, this.button.y + 22);
-        }
-    }
-    
-    class FakeVirusAlert {
-        constructor() {
-            this.width = 400; this.height = 120;
-            this.x = Math.random() < 0.5 ? -this.width : canvas.width;
-            this.y = Math.random() * (canvas.height - this.height);
-            this.speed = (0.8 + Math.random() * 0.5) * state.difficultyMultiplier;
-            this.contactDamage = 20; this.clickDamage = 15; this.points = 40;
-            this.color = '#1E2D3F';
-            this.closeButton = { x: this.x + this.width - 25, y: this.y + 5, width: 20, height: 20 };
-            this.wobble = Math.random() * 100;
-        }
-        update() {
-            const angle = Math.atan2(state.mouse.y - (this.y + this.height/2), state.mouse.x - (this.x + this.width/2));
-            this.x += Math.cos(angle) * this.speed;
-            this.y += Math.sin(angle) * this.speed + Math.sin(this.wobble) * 0.5;
-            this.wobble += 0.1;
-            this.closeButton.x = this.x + this.width - 25; this.closeButton.y = this.y + 5;
-            if (isPointInRect(state.mouse, this)) takeDamage(this.contactDamage * 0.1);
-        }
-        draw(ctx) {
-            ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y, this.width, this.height);
-            ctx.fillStyle = '#D9534F'; ctx.font = "bold 24px 'Poppins'"; ctx.textAlign = 'left';
-            ctx.fillText("!", this.x + 20, this.y + 60);
-            ctx.fillStyle = '#fff'; ctx.font = "bold 16px 'Inter'";
-            ctx.fillText("Security Threat Detected", this.x + 50, this.y + 45);
-            ctx.font = "14px 'Inter'"; ctx.fillStyle = '#ccc';
-            ctx.fillText("Windows Defender found 5 viruses. Immediate action required.", this.x + 50, this.y + 70);
-            ctx.fillStyle = '#aaa'; ctx.fillRect(this.closeButton.x, this.closeButton.y, this.closeButton.width, this.closeButton.height);
-            ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.textAlign = 'center';
-            ctx.strokeText('X', this.closeButton.x + 10, this.closeButton.y + 15);
+        destroy(addScore = 0, sound = sounds.destroy) {
+            this.alive = false;
+            playSound(sound);
+            state.score += addScore;
+            state.screenShake = Math.max(state.screenShake, 8);
+            spawnParticles(this.x + this.w / 2, this.y + this.h / 2, 25, '#00BFFF', 4);
         }
     }
 
-    // Unchanged classes (BannerAd, Particles, Powerup) with minor style tweaks
-    class BannerAd { /* ... (code from previous version, largely unchanged) ... */
-        constructor() {
-            this.width = canvas.width; this.height = 80; this.x = 0;
-            this.y = Math.random() > 0.5 ? -this.height : canvas.height;
-            this.vy = (this.y < 0) ? (1.5 + Math.random()) * state.difficultyMultiplier : (-1.5 - Math.random()) * state.difficultyMultiplier;
-            this.contactDamage = 15; this.clickDamage = 10; this.points = 0;
-            this.color1 = `hsl(${Math.random() * 360}, 100%, 50%)`;
-            this.color2 = `hsl(${Math.random() * 360}, 100%, 50%)`;
-            this.closeButton = null;
+    class Particle {
+        constructor(x, y, color, speed) {
+            this.x = x; this.y = y; this.color = color;
+            const angle = Math.random() * Math.PI * 2;
+            this.vx = Math.cos(angle) * (Math.random() * speed);
+            this.vy = Math.sin(angle) * (Math.random() * speed);
+            this.lifespan = 1; this.decay = Math.random() * 0.03 + 0.01;
         }
-        update() { this.y += this.vy; if (isPointInRect(state.mouse, this)) takeDamage(this.contactDamage * 0.2); }
-        draw(ctx) {
-            let gradient = ctx.createLinearGradient(0, this.y, 0, this.y + this.height);
-            gradient.addColorStop(0, this.color1); gradient.addColorStop(1, this.color2);
-            ctx.fillStyle = gradient; ctx.fillRect(this.x, this.y, this.width, this.height);
-            ctx.fillStyle = 'white'; ctx.font = "bold 40px 'Poppins'"; ctx.textAlign = 'center'; ctx.shadowColor = 'black'; ctx.shadowBlur = 10;
-            ctx.fillText(">>> UNMISSABLE DEALS! CLICK NOW! <<<", this.x + this.width / 2, this.y + 55);
+        update() {
+            this.x += this.vx; this.y += this.vy; this.vx *= 0.98; this.vy *= 0.98;
+            this.lifespan -= this.decay;
+        }
+        draw() {
+            ctx.globalAlpha = this.lifespan;
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, 2, 2);
+        }
+    }
+
+    class PopupAd extends Entity {
+        constructor(x, y) {
+            super(x, y, 380, 200);
+            this.clickDamage = 10; this.points = 20;
+            this.hasFake = state.difficulty > 1.3 && Math.random() < 0.4;
+            this.buttons = {
+                real: { x: this.x + this.w - 30, y: this.y + 10, w: 20, h: 20 },
+                fake: this.hasFake ? { x: this.x + this.w - 60, y: this.y + 10, w: 20, h: 20 } : null,
+            };
+        }
+        onClick(mouse) {
+            if (!isPointInRect(mouse, this)) return false;
+            // Check buttons first
+            if (isPointInRect(mouse, this.buttons.real)) { this.destroy(this.points); return true; }
+            if (this.hasFake && isPointInRect(mouse, this.buttons.fake)) { takeDamage(this.clickDamage * 2); playSound(sounds.fakeClick); return true; }
+            // Clicked on body
+            takeDamage(this.clickDamage);
+            return true;
+        }
+        draw() {
+            ctx.save();
+            ctx.translate(this.x + this.w / 2, this.y + this.h / 2);
+            ctx.scale(this.scale, this.scale);
+            ctx.globalAlpha = this.opacity;
+            ctx.translate(-(this.x + this.w / 2), -(this.y + this.h / 2));
+            
+            // Main body
+            ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 30;
+            ctx.fillStyle = '#1E1E24'; drawRoundRect(this.x, this.y, this.w, this.h, 8); ctx.fill();
             ctx.shadowBlur = 0;
-        }
-    }
-    class DestructionParticle { /* ... (code from previous version) ... */ 
-        constructor(x, y, color) {
-            this.x = x; this.y = y;
-            this.vx = (Math.random() - 0.5) * 5; this.vy = (Math.random() - 0.5) * 5;
-            this.lifespan = 50; this.radius = Math.random() * 3 + 1; this.color = color;
-        }
-        update() { this.x += this.vx; this.y += this.vy; this.vy += 0.05; this.lifespan--; }
-        draw(ctx) {
-            ctx.fillStyle = this.color; ctx.globalAlpha = this.lifespan / 50;
-            ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI); ctx.fill();
-            ctx.globalAlpha = 1;
-        }
-    }
-    class Powerup { /* ... (code from previous version) ... */ 
-        constructor(x, y, type) {
-            this.x = x; this.y = y; this.width = 50; this.height = 50; this.type = type;
-            this.colors = { 'BOMB': '#ff3d3d', 'AUTO_SHIELD': '#00d4ff', 'SUPER_CLICK': '#ff00ff' };
-            this.text = { 'BOMB': 'BOMB', 'AUTO_SHIELD': 'SHLD', 'SUPER_CLICK': 'CLCK' };
-        }
-        activate() { /* Unchanged */
-            playSound(sounds.powerup);
-            switch (this.type) {
-                case 'BOMB':
-                    state.ads = state.ads.filter(ad => ad instanceof BannerAd || ad instanceof FakeVirusAlert);
-                    state.score += 50;
-                    break;
-                case 'AUTO_SHIELD':
-                    player.shield.autoActive = true;
-                    player.shield.autoDuration = 300; // 5 seconds at 60fps
-                    break;
-                case 'SUPER_CLICK':
-                    player.powerups.superClick = true;
-                    break;
-            }
-        }
-        draw(ctx) {
-            ctx.fillStyle = this.colors[this.type]; ctx.shadowColor = this.colors[this.type]; ctx.shadowBlur = 15;
-            ctx.fillRect(this.x, this.y, this.width, this.height); ctx.shadowBlur = 0;
-            ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.strokeRect(this.x, this.y, this.width, this.height);
-            ctx.fillStyle = 'white'; ctx.font = "bold 20px 'Poppins'"; ctx.textAlign = 'center';
-            ctx.fillText(this.text[this.type], this.x + 25, this.y + 33);
+            
+            // Header
+            ctx.fillStyle = '#2A2F3A'; drawRoundRect(this.x, this.y, this.w, 40, 8); ctx.fill();
+            ctx.beginPath(); ctx.rect(this.x, this.y+20, this.w, 20); ctx.fill();
+            
+            // Text
+            ctx.fillStyle = '#EFEFEF'; ctx.font = "bold 16px Poppins"; ctx.textAlign = 'center';
+            ctx.fillText("Exclusive Offer Just For You!", this.x + this.w/2, this.y + 100);
+
+            // Draw buttons
+            const drawButton = (btn, isReal) => {
+                btn.hover = isPointInRect(state.mouse, btn);
+                ctx.fillStyle = btn.hover ? (isReal ? '#2ECC40' : '#FF4136') : '#555';
+                if(state.mouse.down && btn.hover) ctx.fillStyle = '#fff';
+                drawRoundRect(btn.x, btn.y, btn.w, btn.h, 4); ctx.fill();
+                ctx.strokeStyle = '#EFEFEF'; ctx.lineWidth = 2; ctx.beginPath();
+                ctx.moveTo(btn.x+5, btn.y+5); ctx.lineTo(btn.x+15, btn.y+15);
+                ctx.moveTo(btn.x+15, btn.y+5); ctx.lineTo(btn.x+5, btn.y+15);
+                ctx.stroke();
+            };
+            drawButton(this.buttons.real, true);
+            if (this.hasFake) drawButton(this.buttons.fake, false);
+            
+            ctx.restore();
         }
     }
     
+    class VideoAd extends Entity {
+        constructor(x, y) {
+            super(x, y, 420, 236);
+            this.clickDamage = 15; this.points = 30; this.progress = 0;
+            this.closeButton = { x: this.x + this.w - 100, y: this.y + this.h - 45, w: 80, h: 30, text: "Skip" };
+        }
+        update() {
+            super.update();
+            if (this.progress < 100) this.progress += 0.2 * state.difficulty;
+        }
+        onClick(mouse) {
+            if (!isPointInRect(mouse, this)) return false;
+            if (this.progress >= 100 && isPointInRect(mouse, this.closeButton)) {
+                this.destroy(this.points); return true;
+            }
+            takeDamage(this.clickDamage);
+            return true;
+        }
+        draw() {
+            ctx.save();
+            ctx.translate(this.x + this.w / 2, this.y + this.h / 2); ctx.scale(this.scale, this.scale);
+            ctx.globalAlpha = this.opacity; ctx.translate(-(this.x + this.w / 2), -(this.y + this.h / 2));
+            
+            ctx.fillStyle = '#000'; drawRoundRect(this.x, this.y, this.w, this.h, 8); ctx.fill();
+            
+            if (this.progress < 100) {
+                const timeLeft = Math.ceil((100 - this.progress) / (0.2 * state.difficulty) / 60);
+                ctx.fillStyle = '#ccc'; ctx.font = "14px Roboto"; ctx.textAlign = 'left';
+                ctx.fillText(`Your video will start in ${timeLeft}s...`, this.x + 20, this.y + 30);
+            } else {
+                this.closeButton.hover = isPointInRect(state.mouse, this.closeButton);
+                ctx.fillStyle = this.closeButton.hover ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)';
+                drawRoundRect(this.closeButton.x, this.closeButton.y, this.closeButton.w, this.closeButton.h, 5); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.font = "bold 14px Poppins"; ctx.textAlign = 'center';
+                ctx.fillText(this.closeButton.text, this.closeButton.x + 40, this.closeButton.y + 21);
+            }
+            
+            ctx.fillStyle = '#444'; drawRoundRect(this.x + 10, this.y + this.h - 15, this.w - 20, 5, 2.5); ctx.fill();
+            ctx.fillStyle = '#FF4136'; drawRoundRect(this.x + 10, this.y + this.h - 15, (this.w - 20) * (this.progress/100), 5, 2.5); ctx.fill();
+            
+            ctx.restore();
+        }
+    }
+    
+    class CookieBanner extends Entity {
+        constructor() {
+            super(0, canvas.height-120, canvas.width, 120);
+            this.clickDamage = 5; this.points = 40;
+            this.acceptBtn = { x: this.x + this.w - 180, y: this.y + 45, w: 150, h: 40 };
+        }
+        onClick(mouse) {
+            if (!isPointInRect(mouse, this)) return false;
+            if (isPointInRect(mouse, this.acceptBtn)) {
+                this.destroy(this.points); return true;
+            }
+            takeDamage(this.clickDamage);
+            return true;
+        }
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = this.opacity;
+            
+            ctx.fillStyle = 'rgba(20, 22, 28, 0.9)'; ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 40;
+            ctx.fillRect(this.x, this.y, this.w, this.h); ctx.shadowBlur = 0;
+            
+            ctx.fillStyle = '#fff'; ctx.font = "bold 18px Poppins"; ctx.textAlign = 'left';
+            ctx.fillText("We value your privacy.", this.x + 40, this.y + 55);
+            ctx.font = "14px Roboto"; ctx.fillStyle = '#aaa';
+            ctx.fillText("By clicking 'Accept', you agree to us using all your data for things.", this.x + 40, this.y + 80);
+
+            this.acceptBtn.hover = isPointInRect(state.mouse, this.acceptBtn);
+            ctx.fillStyle = this.acceptBtn.hover ? '#00BFFF' : '#007bff';
+            if(state.mouse.down && this.acceptBtn.hover) ctx.fillStyle = '#fff';
+            drawRoundRect(this.acceptBtn.x, this.acceptBtn.y, this.acceptBtn.w, this.acceptBtn.h, 6); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.font = "bold 16px Poppins"; ctx.textAlign = 'center';
+            ctx.fillText("Accept All", this.acceptBtn.x + 75, this.acceptBtn.y + 26);
+            
+            ctx.restore();
+        }
+    }
+    
+    class OSNotification extends Entity {
+        constructor() {
+            const w = 400, h = 100;
+            super(canvas.width - w - 20, canvas.height, w, h); // Start below screen
+            this.targetY = canvas.height - h - 20; this.speed = 8;
+            this.clickDamage = 20; this.points = 50;
+            this.closeBtn = { x: this.x + this.w - 30, y: this.y + 10, w: 20, h: 20 };
+        }
+        update() {
+            if(this.y > this.targetY) this.y -= this.speed;
+            this.closeBtn.x = this.x + this.w - 30; this.closeBtn.y = this.y + 10;
+        }
+        onClick(mouse) {
+            if(!isPointInRect(mouse, this)) return false;
+            if(isPointInRect(mouse, this.closeBtn)) { this.destroy(this.points); return true; }
+            takeDamage(this.clickDamage);
+            return true;
+        }
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = 0.95;
+            ctx.fillStyle = '#111827'; ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 30;
+            drawRoundRect(this.x, this.y, this.w, this.h, 10); ctx.fill(); ctx.shadowBlur = 0;
+            
+            ctx.fillStyle = '#FF4136'; drawRoundRect(this.x+20, this.y+30, 40, 40, 20); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.font = "bold 30px Poppins"; ctx.textAlign = 'center';
+            ctx.fillText("!", this.x + 40, this.y + 60);
+
+            ctx.fillStyle = '#fff'; ctx.font = "bold 16px Roboto"; ctx.textAlign = 'left';
+            ctx.fillText("Security Alert", this.x + 80, this.y + 45);
+            ctx.fillStyle = '#aaa'; ctx.font = "14px Roboto";
+            ctx.fillText("5 viruses found. Clean system immediately.", this.x + 80, this.y + 65);
+            
+            this.closeBtn.hover = isPointInRect(state.mouse, this.closeBtn);
+            ctx.strokeStyle = this.closeBtn.hover ? '#fff' : '#888'; ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.moveTo(this.closeBtn.x + 5, this.closeBtn.y + 5); ctx.lineTo(this.closeBtn.x + 15, this.closeBtn.y + 15);
+            ctx.moveTo(this.closeBtn.x + 15, this.closeBtn.y + 5); ctx.lineTo(this.closeBtn.x + 5, this.closeBtn.y + 15); ctx.stroke();
+            ctx.restore();
+        }
+    }
+    
+    class Powerup extends Entity {
+        constructor(x, y) {
+            super(x, y, 60, 60);
+            this.points = 100;
+        }
+        onClick(mouse) {
+            if(isPointInRect(mouse, this)) {
+                this.destroy(this.points, sounds.powerup);
+                player.shield.rechargeTimer = 0;
+                state.health = Math.min(100, state.health + 25);
+                state.entities.forEach(e => { if (e instanceof PopupAd) e.destroy(10, new Audio()) }); // Bomb effect
+                return true;
+            }
+            return false;
+        }
+        draw() {
+            ctx.save();
+            const glowColor = '#2ECC40';
+            ctx.shadowColor = glowColor; ctx.shadowBlur = 30 * this.scale;
+            ctx.fillStyle = glowColor;
+            drawRoundRect(this.x, this.y, this.w * this.scale, this.h * this.scale, 30*this.scale); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.font = "bold 24px Poppins";
+            ctx.textAlign = 'center'; ctx.strokeText("+", this.x + this.w/2, this.y + this.h/2 + 8);
+            ctx.restore();
+        }
+    }
+
     // --- MAIN GAME LOOP ---
     function gameLoop() {
         if (state.gameOver) return;
         // --- UPDATE ---
         state.adSpawnTimer--;
         if (state.adSpawnTimer <= 0) {
-            spawnAd();
-            state.difficultyMultiplier += 0.05; // Ramps up faster
-            state.adSpawnTimer = Math.max(15, 120 / state.difficultyMultiplier);
+            spawnAd(); state.difficulty += 0.05;
+            state.adSpawnTimer = Math.max(20, 120 / state.difficulty);
         }
-        spawnPowerup();
-
-        // **Smooth Cursor Logic**
-        state.targetSlowdown = 0;
-        state.ads.forEach(ad => ad.update());
-        state.currentSlowdown += (state.targetSlowdown - state.currentSlowdown) * 0.1;
-        state.mouse.x += (state.mouse.targetX - state.mouse.x) * (1 - state.currentSlowdown);
-        state.mouse.y += (state.mouse.targetY - state.mouse.y) * (1 - state.currentSlowdown);
-        
-        for (let i = state.particles.length - 1; i >= 0; i--) {
-            state.particles[i].update(); if (state.particles[i].lifespan <= 0) state.particles.splice(i, 1);
-        }
-        state.ads = state.ads.filter(ad => !(ad instanceof BannerAd) || (ad.y < canvas.height && ad.y > -ad.height));
         if (player.shield.rechargeTimer > 0) player.shield.rechargeTimer--;
-        if (player.shield.autoDuration > 0) player.shield.autoDuration--; else player.shield.autoActive = false;
-        if (state.damageFlash > 0) state.damageFlash--;
-        updateUI();
-
+        if (state.screenShake > 0) state.screenShake--;
+        
+        state.entities.forEach(e => e.update()); state.particles.forEach(p => p.update());
+        state.entities = state.entities.filter(e => e.alive); state.particles = state.particles.filter(p => p.lifespan > 0);
+        
+        // Cursor trail
+        if (Math.random() > 0.5) state.particles.push(new Particle(state.mouse.x, state.mouse.y, '#00BFFF', 1));
+        
         // --- DRAW ---
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        canvas.classList.toggle('damage-flash', state.damageFlash > 0);
-        state.ads.forEach(ad => ad.draw(ctx));
-        state.particles.forEach(p => p.draw(ctx));
-        state.powerups.forEach(p => p.draw(ctx));
+        ctx.save();
+        if(state.screenShake > 0) ctx.translate(Math.random()*8-4, Math.random()*8-4);
+        
+        ctx.fillStyle = '#0D0F12'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw background
+        state.backgroundStars.forEach(s => { s.y += 0.1; if(s.y>canvas.height) s.y=0; ctx.fillStyle=`rgba(200,220,255,${s.r*0.5})`; ctx.fillRect(s.x, s.y, s.r, s.r); });
+        
+        state.particles.forEach(p => p.draw()); ctx.globalAlpha = 1;
+        state.entities.forEach(e => e.draw());
 
         // Draw Player Shield
-        if (player.shield.active || player.shield.autoActive) {
-            const shieldColor = player.shield.autoActive ? 'rgba(0, 255, 100, 0.2)' : 'rgba(0, 200, 255, 0.2)';
-            ctx.fillStyle = shieldColor; ctx.strokeStyle = player.shield.autoActive ? 'lime' : 'cyan'; ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.arc(state.mouse.x, state.mouse.y, player.shield.radius, 0, Math.PI * 2);
-            ctx.fill(); ctx.stroke();
+        if (player.shield.active) {
+            const shieldGradient = ctx.createRadialGradient(state.mouse.x, state.mouse.y, 0, state.mouse.x, state.mouse.y, player.shield.radius);
+            shieldGradient.addColorStop(0, 'rgba(0, 191, 255, 0)'); shieldGradient.addColorStop(0.8, 'rgba(0, 191, 255, 0.2)');
+            shieldGradient.addColorStop(1, 'rgba(0, 191, 255, 0.5)');
+            ctx.fillStyle = shieldGradient; ctx.beginPath(); ctx.arc(state.mouse.x, state.mouse.y, player.shield.radius, 0, Math.PI * 2); ctx.fill();
         }
         
         // Draw Custom Cursor
-        const cursorColor = player.powerups.superClick ? '#ff00ff' : '#fff';
-        ctx.strokeStyle = cursorColor; ctx.lineWidth = 2;
-        ctx.shadowColor = cursorColor; ctx.shadowBlur = player.powerups.superClick ? 10 : 0;
-        ctx.beginPath();
-        ctx.moveTo(state.mouse.x - 8, state.mouse.y); ctx.lineTo(state.mouse.x + 8, state.mouse.y);
-        ctx.moveTo(state.mouse.x, state.mouse.y - 8); ctx.lineTo(state.mouse.x, state.mouse.y + 8);
-        ctx.stroke(); ctx.shadowBlur = 0;
-
-        if (state.gameRunning) requestAnimationFrame(gameLoop);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(state.mouse.x - 10, state.mouse.y); ctx.lineTo(state.mouse.x + 10, state.mouse.y);
+        ctx.moveTo(state.mouse.x, state.mouse.y - 10); ctx.lineTo(state.mouse.x, state.mouse.y + 10); ctx.stroke();
+        
+        ctx.restore();
+        
+        updateUI();
+        requestAnimationFrame(gameLoop);
     }
 });
