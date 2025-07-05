@@ -2,14 +2,21 @@
 const config = {
     player: {
         maxHealth: 100,
-        shieldDuration: 2000, // 2 seconds
-        shieldCooldown: 5000, // 5 seconds
-        iFrameDuration: 1000 // Invincibility time after taking damage
+        shieldDuration: 2000,
+        shieldCooldown: 5000,
+        iFrameDuration: 1000,
     },
     game: {
         waveStartDelay: 3000,
         bossWaveInterval: 5,
-        chaserSpeed: 0.03,
+    },
+    powerups: {
+        spawnChance: 0.15, // 15% chance to spawn on ad close
+        ironCursorDuration: 5000, // 5 seconds
+    },
+    wave: {
+        baseThreat: 50, // Starting "budget" for wave 1
+        threatPerWave: 20, // How much the budget increases each wave
     }
 };
 
@@ -18,16 +25,13 @@ let state = {
     score: 0,
     wave: 0,
     health: config.player.maxHealth,
-    shield: {
-        active: false,
-        onCooldown: false,
-        cooldownTimer: null,
-    },
+    shield: { active: false, onCooldown: false },
+    powerups: { ironCursorActive: false },
     playerInvincible: false,
-    activeAds: new Set(),
+    activeAds: new Map(), // Use a Map to store ad data and DOM element
+    activePowerups: new Set(),
     mouseX: 0,
     mouseY: 0,
-    bossActive: false,
 };
 
 // --- DOM ELEMENTS ---
@@ -37,6 +41,7 @@ const DOMElements = {
     healthBar: document.getElementById('health-bar'),
     scoreDisplay: document.getElementById('score-display'),
     waveDisplay: document.getElementById('wave-display'),
+    powerupDisplay: document.getElementById('powerup-display'),
     startScreen: document.getElementById('start-screen'),
     gameOverScreen: document.getElementById('game-over-screen'),
     finalScore: document.getElementById('final-score'),
@@ -44,11 +49,9 @@ const DOMElements = {
     playerShield: document.getElementById('player-shield'),
     startButton: document.getElementById('start-button'),
     restartButton: document.getElementById('restart-button'),
-    bossAlertScreen: document.getElementById('boss-alert-screen'),
-    bossName: document.getElementById('boss-name'),
-    bossDescription: document.getElementById('boss-description'),
+    waveAlertScreen: document.getElementById('wave-alert-screen'),
+    waveAlertTitle: document.getElementById('wave-alert-title'),
 };
-
 
 // =================================================================================
 // --- PLAYER MODULE ---
@@ -62,7 +65,6 @@ const Player = {
             DOMElements.playerShield.style.left = `${state.mouseX}px`;
             DOMElements.playerShield.style.top = `${state.mouseY}px`;
         });
-
         DOMElements.gameContainer.addEventListener('contextmenu', e => {
             e.preventDefault();
             if (state.gameRunning) this.activateShield();
@@ -70,15 +72,12 @@ const Player = {
     },
 
     takeDamage(amount) {
-        if (state.playerInvincible || (state.shield.active && !state.bossActive)) return; // Shield protects from normal ads
+        if (state.playerInvincible || state.shield.active || state.powerups.ironCursorActive) return;
 
         state.health = Math.max(0, state.health - amount);
         UI.updateHealthBar();
-        UI.flashDamage();
-
-        if (state.health <= 0) {
-            Game.end();
-        } else {
+        if (state.health <= 0) Game.end();
+        else {
             state.playerInvincible = true;
             setTimeout(() => { state.playerInvincible = false; }, config.player.iFrameDuration);
         }
@@ -86,24 +85,19 @@ const Player = {
 
     activateShield() {
         if (state.shield.active || state.shield.onCooldown) return;
-
         state.shield.active = true;
         state.shield.onCooldown = true;
         DOMElements.playerShield.classList.add('active');
+        UI.updatePowerupDisplay('SHIELD ACTIVE', config.player.shieldDuration);
 
-        setTimeout(() => {
-            state.shield.active = false;
-            DOMElements.playerShield.classList.remove('active');
-        }, config.player.shieldDuration);
-
-        state.shield.cooldownTimer = setTimeout(() => {
-            state.shield.onCooldown = false;
-        }, config.player.shieldCooldown);
+        setTimeout(() => { state.shield.active = false; }, config.player.shieldDuration);
+        setTimeout(() => { state.shield.onCooldown = false; UI.updatePowerupDisplay('READY'); }, config.player.shieldCooldown);
     },
 
-    addScore(points) {
+    addScore(points, x, y) {
         state.score += points;
         UI.updateScore();
+        UI.showFloatingScore(x, y, `+${points}`);
     }
 };
 
@@ -114,271 +108,275 @@ const UI = {
     updateHealthBar() {
         const percentage = (state.health / config.player.maxHealth) * 100;
         DOMElements.healthBar.style.width = `${percentage}%`;
-        DOMElements.healthBar.style.backgroundColor = percentage > 50 ? 'var(--primary-color)' : percentage > 25 ? '#ffd60a' : 'var(--danger-color)';
+        DOMElements.healthBar.style.backgroundColor = percentage > 60 ? 'var(--primary-color)' : percentage > 30 ? 'var(--warning-color)' : 'var(--danger-color)';
     },
-
-    updateScore() {
-        DOMElements.scoreDisplay.textContent = state.score;
+    updateScore: () => DOMElements.scoreDisplay.textContent = state.score,
+    updateWave: () => DOMElements.waveDisplay.textContent = state.wave,
+    showFloatingScore(x, y, text) {
+        const el = document.createElement('div');
+        el.className = 'floating-score';
+        el.textContent = text;
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        DOMElements.gameScreen.appendChild(el);
+        setTimeout(() => el.remove(), 1000);
     },
-
-    updateWave() {
-        DOMElements.waveDisplay.textContent = state.wave;
+    updatePowerupDisplay(text, duration) {
+        DOMElements.powerupDisplay.textContent = text;
+        if(duration) {
+            let timeLeft = duration / 1000;
+            const interval = setInterval(() => {
+                timeLeft -= 0.1;
+                if(timeLeft > 0) {
+                     DOMElements.powerupDisplay.textContent = `${text} ${timeLeft.toFixed(1)}s`;
+                } else {
+                    clearInterval(interval);
+                }
+            }, 100);
+        }
     },
-    
-    flashDamage() {
-        DOMElements.gameContainer.classList.add('damage-flash');
-        setTimeout(() => DOMElements.gameContainer.classList.remove('damage-flash'), 200);
-    },
-    
-    showBossAlert(boss, callback) {
-        DOMElements.bossName.textContent = boss.name;
-        DOMElements.bossDescription.textContent = boss.description;
-        DOMElements.bossAlertScreen.style.display = 'flex';
-        
-        setTimeout(() => {
-            DOMElements.bossAlertScreen.style.display = 'none';
-            callback();
-        }, 4000);
+    showWaveAlert(text, duration = 2000) {
+        DOMElements.waveAlertTitle.textContent = text;
+        DOMElements.waveAlertScreen.style.display = 'flex';
+        setTimeout(() => DOMElements.waveAlertScreen.style.display = 'none', duration);
     }
 };
+
+// =================================================================================
+// --- POWERUP MODULE ---
+// =================================================================================
+const PowerupManager = {
+    types: {
+        'bomb': {
+            activate: () => {
+                AdManager.getAllAds().forEach(ad => AdManager.destroyAd(ad, 0));
+                UI.showFloatingScore(state.mouseX, state.mouseY, "KABOOM!");
+            }
+        },
+        'iron-cursor': {
+            activate: () => {
+                state.powerups.ironCursorActive = true;
+                DOMElements.gameContainer.classList.add('iron-cursor-active');
+                UI.updatePowerupDisplay('IRON CURSOR', config.powerups.ironCursorDuration);
+                setTimeout(() => {
+                    state.powerups.ironCursorActive = false;
+                    DOMElements.gameContainer.classList.remove('iron-cursor-active');
+                     if(!state.shield.onCooldown) UI.updatePowerupDisplay('READY');
+                }, config.powerups.ironCursorDuration);
+            }
+        }
+    },
+
+    spawn(x, y) {
+        const type = Math.random() > 0.5 ? 'bomb' : 'iron-cursor';
+        const el = document.createElement('div');
+        el.className = `power-up ${type}`;
+        el.dataset.type = type;
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+
+        el.onclick = () => {
+            this.types[type].activate();
+            el.remove();
+            state.activePowerups.delete(el);
+        };
+
+        state.activePowerups.add(el);
+        DOMElements.gameScreen.appendChild(el);
+        setTimeout(() => {
+            if (state.activePowerups.has(el)) {
+                el.remove();
+                state.activePowerups.delete(el);
+            }
+        }, 7000); // Powerups disappear after 7 seconds
+    },
+
+    clearAll() {
+        state.activePowerups.forEach(p => p.remove());
+        state.activePowerups.clear();
+    }
+};
+
 
 // =================================================================================
 // --- AD FACTORY & MANAGER ---
 // =================================================================================
 const AdManager = {
-    adTypes: {
-        // Simple popup
+    adDefinitions: {
         popup: {
-            create: () => {
-                const ad = AdManager.createGenericAd('popup', 'WINNER!', 'You won a FREE iPhone 18!');
-                ad.onclick = () => Player.takeDamage(5);
-                return ad;
-            },
-            points: 10
+            threat: 10,
+            points: 100,
+            create: () => AdManager.createAd('popup', {
+                title: 'Congratulations!',
+                content: `<h3>You are the 1,000,000th visitor!</h3><p>Click to claim your unbelievable prize!</p>`,
+                clickDamage: 10,
+            })
         },
-        // Banner that scrolls
-        banner: {
-            create: () => {
-                const ad = AdManager.createGenericAd('banner', 'Advertisement', 'Hot single ghosts in your area want to meet you!');
-                ad.style.top = '0';
-                ad.style.left = '0';
-                ad.onclick = () => Player.takeDamage(10);
-                return ad;
-            },
-            points: 15
+        gremlinAd: {
+            threat: 20,
+            points: 250,
+            create: () => AdManager.createAd('gremlin-ad', {
+                title: 'System Alert',
+                content: `<h3>Your drivers are out of date.</h3><p>Please update to continue.</p>`,
+                clickDamage: 10,
+                isGremlin: true,
+            })
         },
-        // Chases the cursor
-        chaser: {
-            create: () => {
-                const ad = AdManager.createGenericAd('chaser', 'VIRUS ALERT!', 'Your PC is infected! Click here to clean!');
-                ad.dataset.isChaser = true;
-                // Damage is handled in game loop by proximity
-                return ad;
-            },
-            points: 25
+        downloadAd: {
+            threat: 25,
+            points: 300,
+            create: () => AdManager.createAd('download-ad', {
+                title: 'Download Required',
+                content: `<h3>Free Movie Player Update</h3>
+                          <div class="button-grid">
+                            <button class="ad-btn primary fake">DOWNLOAD</button>
+                            <button class="ad-btn primary fake">DOWNLOAD NOW</button>
+                            <button class="ad-btn secondary fake">Install Fast</button>
+                            <button class="ad-btn secondary safe">Continue without installing</button>
+                          </div>`,
+                closeable: false
+            })
         },
-        // Multiplies when closed
-        trap: {
-             create: () => {
-                const ad = AdManager.createGenericAd('popup', 'CRITICAL UPDATE', 'Your system requires an immediate update.');
-                ad.onclick = () => Player.takeDamage(5);
-                ad.dataset.isTrap = true;
-                return ad;
-            },
-            points: 5 // Low points because it spawns more
-        },
-        // Area damage until skipped
-        video: {
-            create: () => {
-                const ad = AdManager.createGenericAd('video-ad', 'Video Player', '');
-                ad.innerHTML = `
-                    <div class="ad-header"><span>Unskippable Ad</span></div>
-                    <div class="ad-content">
-                        <div class="damage-aura"></div>
-                        <div class="skip-btn">Skip Ad >></div>
-                    </div>`;
-                
-                const skipBtn = ad.querySelector('.skip-btn');
-                setTimeout(() => {
-                    skipBtn.style.display = 'block';
-                }, 3000);
-
-                skipBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    AdManager.destroyAd(ad, this.video.points);
-                };
-                
-                // Damage handled by interval in game loop
-                ad.dataset.isVideo = true;
-                return ad;
-            },
-            points: 30
+        cookieWall: {
+            threat: 35,
+            points: 400,
+            create: () => AdManager.createAd('cookie-wall', {
+                title: 'Our Site Uses Cookies',
+                content: `<p>We use cookies and other data to improve your online experience. By clicking "Accept All", you agree to this.</p>
+                          <div>
+                            <button class="ad-btn secondary fake">Manage Preferences</button>
+                            <button class="ad-btn primary safe">ACCEPT ALL</button>
+                          </div>`,
+                isFullScreen: true,
+                closeable: false
+            })
         }
     },
-
-    createGenericAd(typeClass, headerText, contentText) {
-        const ad = document.createElement('div');
-        ad.className = `ad ${typeClass}`;
-        ad.style.left = `${Math.random() * (DOMElements.gameScreen.clientWidth - 350)}px`;
-        ad.style.top = `${Math.random() * (DOMElements.gameScreen.clientHeight - 200)}px`;
-
-        const header = document.createElement('div');
-        header.className = 'ad-header';
-        header.textContent = headerText;
-
-        const closeBtn = document.createElement('button');
-        closeBtn.className = 'close-btn';
-        closeBtn.innerHTML = '×';
-        closeBtn.onclick = (e) => {
-            e.stopPropagation();
-            if (ad.dataset.isTrap) {
-                AdManager.destroyAd(ad, this.adTypes.trap.points);
-                Spawner.spawnAds(2, ['popup']); // Spawn 2 basic popups as the trap
-            } else {
-                AdManager.destroyAd(ad, this.adTypes[typeClass].points);
-            }
+    
+    createAd(className, options) {
+        const ad = {
+            id: `ad_${Date.now()}_${Math.random()}`,
+            element: document.createElement('div'),
+            ...options
         };
+        ad.element.className = `ad ${className}`;
 
-        const content = document.createElement('div');
-        content.className = 'ad-content';
-        content.innerHTML = `<h3>${contentText}</h3>`;
+        if (!options.isFullScreen) {
+            ad.element.style.left = `${5 + Math.random() * (DOMElements.gameScreen.clientWidth - 450)}px`;
+            ad.element.style.top = `${5 + Math.random() * (DOMElements.gameScreen.clientHeight - 350)}px`;
+        }
 
-        header.appendChild(closeBtn);
-        ad.appendChild(header);
-        ad.appendChild(content);
+        let headerHTML = '';
+        if (options.closeable !== false) {
+             headerHTML = `<div class="ad-header"><span>${options.title}</span><button class="close-btn">×</button></div>`;
+        } else {
+             headerHTML = `<div class="ad-header"><span>${options.title}</span></div>`;
+        }
+
+        ad.element.innerHTML = `${headerHTML}<div class="ad-content">${options.content}</div>`;
+        
+        // --- Event Handling ---
+        const closeBtn = ad.element.querySelector('.close-btn');
+        if (closeBtn) {
+            if(options.isGremlin){
+                let moveCount = 0;
+                const moveButton = () => {
+                    if(moveCount > 4) return; // Prevent infinite running
+                    const rect = ad.element.getBoundingClientRect();
+                    const newX = Math.random() * (rect.width - 20);
+                    const newY = Math.random() * (rect.height - ad.element.querySelector('.ad-header').offsetHeight - 20) + ad.element.querySelector('.ad-header').offsetHeight;
+                    closeBtn.style.transform = `translate(${newX}px, ${newY}px)`;
+                    moveCount++;
+                }
+                closeBtn.addEventListener('mouseover', moveButton);
+            }
+            closeBtn.onclick = e => { e.stopPropagation(); this.destroyAd(ad, this.adDefinitions[className.split(' ')[0]].points); };
+        }
+
+        if (options.clickDamage) {
+            ad.element.onclick = () => Player.takeDamage(options.clickDamage);
+        }
+
+        ad.element.querySelectorAll('.fake').forEach(btn => btn.onclick = e => { e.stopPropagation(); Player.takeDamage(15); });
+        ad.element.querySelectorAll('.safe').forEach(btn => btn.onclick = e => { e.stopPropagation(); this.destroyAd(ad, this.adDefinitions[className.split(' ')[0]].points); });
+
+        ad.element.addEventListener('click', (e) => {
+             if (state.powerups.ironCursorActive) {
+                e.stopPropagation();
+                this.destroyAd(ad, 0); // No points for iron cursor destroy
+                UI.showFloatingScore(e.clientX, e.clientY, "ZAP!");
+             }
+        });
 
         return ad;
     },
 
-    spawnAd(type) {
-        if (!this.adTypes[type]) return;
-        const ad = this.adTypes[type].create();
-        state.activeAds.add(ad);
-        DOMElements.gameScreen.appendChild(ad);
+    spawn(type) {
+        const definition = this.adDefinitions[type];
+        if (!definition) return;
+        const ad = definition.create();
+        state.activeAds.set(ad.id, ad);
+        DOMElements.gameScreen.appendChild(ad.element);
     },
 
-    destroyAd(adElement, points) {
-        if (!state.activeAds.has(adElement)) return; // Already destroyed
+    destroyAd(ad, points) {
+        if (!state.activeAds.has(ad.id)) return;
         
-        adElement.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
-        adElement.style.transform = 'scale(0)';
-        adElement.style.opacity = '0';
+        const rect = ad.element.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
 
-        setTimeout(() => {
-            adElement.remove();
-        }, 200);
+        if (points > 0) Player.addScore(points, centerX, centerY);
+        if (Math.random() < config.powerups.spawnChance) PowerupManager.spawn(centerX, centerY);
+
+        ad.element.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+        ad.element.style.transform = 'scale(0)';
+        ad.element.style.opacity = '0';
         
-        state.activeAds.delete(adElement);
-        Player.addScore(points);
-
+        setTimeout(() => ad.element.remove(), 200);
+        state.activeAds.delete(ad.id);
+        
         if (!state.bossActive && state.activeAds.size === 0 && state.gameRunning) {
             Game.startNextWave();
         }
     },
     
-    clearAllAds() {
-        state.activeAds.forEach(ad => ad.remove());
-        state.activeAds.clear();
-    }
+    getAllAds: () => Array.from(state.activeAds.values()),
+    clearAll: () => { AdManager.getAllAds().forEach(ad => ad.element.remove()); state.activeAds.clear(); }
 };
 
 // =================================================================================
-// --- SPAWNER MODULE ---
+// --- WAVE SPAWNER MODULE ---
 // =================================================================================
 const Spawner = {
-    waveConfig: [
-        { count: 3, types: ['popup'] },          // Wave 1
-        { count: 5, types: ['popup'] },          // Wave 2
-        { count: 4, types: ['popup', 'banner'] }, // Wave 3
-        { count: 6, types: ['popup', 'banner', 'trap'] }, // Wave 4
-        { boss: 'cookieMonster' },                // Wave 5 (Boss)
-        { count: 5, types: ['chaser', 'popup'] }, // Wave 6
-        { count: 7, types: ['banner', 'video'] }, // Wave 7
-        { count: 8, types: ['chaser', 'trap', 'video'] }, // Wave 8
-        // ... gets harder
-    ],
+    generateWave(waveNumber) {
+        const budget = config.wave.baseThreat + (waveNumber * config.wave.threatPerWave);
+        let currentBudget = budget;
+        const spawnList = [];
+
+        const availableAds = Object.entries(AdManager.adDefinitions).filter(([type, def]) => {
+            if (waveNumber < 3 && (type === 'downloadAd' || type === 'cookieWall')) return false;
+            if (waveNumber < 2 && type === 'gremlinAd') return false;
+            return true;
+        });
+
+        while (currentBudget > 0 && spawnList.length < 15) { // Cap ads per wave
+            const affordableAds = availableAds.filter(([_, def]) => def.threat <= currentBudget);
+            if(affordableAds.length === 0) break;
+            
+            const [type, def] = affordableAds[Math.floor(Math.random() * affordableAds.length)];
+            spawnList.push(type);
+            currentBudget -= def.threat;
+        }
+        return spawnList;
+    },
 
     spawnWave(waveNumber) {
-        const configIndex = Math.min(waveNumber - 1, this.waveConfig.length - 1);
-        const wave = this.waveConfig[configIndex];
-
-        if (wave.boss) {
-            state.bossActive = true;
-            UI.showBossAlert(Bosses[wave.boss], () => {
-                Bosses[wave.boss].start();
-            });
-        } else {
-            const typesToSpawn = wave.types || ['popup'];
-            this.spawnAds(wave.count, typesToSpawn);
-        }
-    },
-    
-    spawnAds(count, types) {
-        for (let i = 0; i < count; i++) {
-            const randomType = types[Math.floor(Math.random() * types.length)];
-            AdManager.spawnAd(randomType);
-        }
-    }
-};
-
-// =================================================================================
-// --- BOSS MODULE ---
-// =================================================================================
-const Bosses = {
-    cookieMonster: {
-        name: "THE COOKIE MONSTER",
-        description: "It wants your data. And it won't take 'no' for an answer.",
-        clicksNeeded: 5,
-        clicks: 0,
-        
-        start() {
-            this.clicks = 0;
-            const bossAd = document.createElement('div');
-            bossAd.className = 'ad boss cookie-monster';
-            bossAd.innerHTML = `
-                <h1>We use cookies to enhance your demise.</h1>
-                <p>Accepting our cookies is mandatory. There is no escape.</p>
-                <div class="button-container">
-                    <button class="accept-btn">Accept</button>
-                    <button class="accept-btn">Accept All</button>
-                    <button class="reject-btn">REJECT (THIS WILL NOT WORK)</button>
-                </div>
-            `;
-            
-            bossAd.querySelectorAll('.accept-btn').forEach(btn => {
-                btn.onclick = () => Player.takeDamage(20);
-            });
-            
-            bossAd.querySelector('.reject-btn').onclick = () => {
-                this.clicks++;
-                Player.takeDamage(5); // Takes damage even on correct click
-                bossAd.style.animation = 'screen-shake 0.2s';
-                setTimeout(() => bossAd.style.animation = '', 200);
-
-                if (this.clicks >= this.clicksNeeded) {
-                    this.defeat(bossAd);
-                }
-            };
-            
-            state.activeAds.add(bossAd);
-            DOMElements.gameScreen.appendChild(bossAd);
-
-            this.minionInterval = setInterval(() => {
-                Spawner.spawnAds(1, ['popup']);
-            }, 2500);
-        },
-        
-        defeat(bossAd) {
-            clearInterval(this.minionInterval);
-            AdManager.destroyAd(bossAd, 500);
-            state.bossActive = false;
-            // Clear remaining minions
-            setTimeout(() => {
-                AdManager.clearAllAds();
-                Player.addScore(500);
-                Game.startNextWave();
-            }, 500);
-        }
+        // if (waveNumber % config.game.bossWaveInterval === 0) { ... BOSS LOGIC ... }
+        const adsToSpawn = this.generateWave(waveNumber);
+        adsToSpawn.forEach((type, i) => {
+            setTimeout(() => AdManager.spawn(type), i * 300); // Stagger spawns
+        });
     }
 };
 
@@ -394,28 +392,27 @@ const Game = {
 
     start() {
         // Reset state
-        state.gameRunning = true;
-        state.score = 0;
-        state.wave = 0;
-        state.health = config.player.maxHealth;
-        state.shield.active = false;
-        state.shield.onCooldown = false;
-        state.bossActive = false;
-        clearTimeout(state.shield.cooldownTimer);
-        AdManager.clearAllAds();
-        
+        Object.assign(state, {
+            gameRunning: true, score: 0, wave: 0,
+            health: config.player.maxHealth,
+            shield: { active: false, onCooldown: false },
+            powerups: { ironCursorActive: false },
+            playerInvincible: false
+        });
+        AdManager.clearAll();
+        PowerupManager.clearAll();
+
         // Update UI
-        DOMElements.startScreen.style.display = 'none';
+        DOMElements.startScreen.style.animation = 'fadeOut 0.5s ease forwards';
+        setTimeout(() => DOMElements.startScreen.style.display = 'none', 500);
         DOMElements.gameOverScreen.style.display = 'none';
+        DOMElements.gameContainer.classList.remove('iron-cursor-active');
         UI.updateHealthBar();
         UI.updateScore();
+        UI.updatePowerupDisplay('READY');
         
         this.startNextWave();
-        
-        if (!this.loopRunning) {
-            this.loopRunning = true;
-            requestAnimationFrame(this.loop);
-        }
+        if (!this.loopRunning) this.loop();
     },
     
     end() {
@@ -423,55 +420,25 @@ const Game = {
         DOMElements.finalScore.textContent = state.score;
         DOMElements.finalWave.textContent = state.wave;
         DOMElements.gameOverScreen.style.display = 'flex';
+        DOMElements.gameOverScreen.style.animation = 'fadeIn 0.5s ease forwards';
     },
     
     startNextWave() {
         state.wave++;
         UI.updateWave();
-        setTimeout(() => {
-            Spawner.spawnWave(state.wave);
-        }, config.game.waveStartDelay);
+        UI.showWaveAlert(`WAVE ${state.wave}`);
+        setTimeout(() => Spawner.spawnWave(state.wave), config.game.waveStartDelay);
     },
 
     loop() {
         if (!state.gameRunning) {
-            Game.loopRunning = false;
+            this.loopRunning = false;
             return;
         }
-
-        const now = Date.now();
-
-        state.activeAds.forEach(ad => {
-            // Chaser logic
-            if (ad.dataset.isChaser) {
-                const adRect = ad.getBoundingClientRect();
-                const gameRect = DOMElements.gameContainer.getBoundingClientRect();
-                const adX = ad.offsetLeft + adRect.width / 2;
-                const adY = ad.offsetTop + adRect.height / 2;
-                
-                const dx = state.mouseX - adX;
-                const dy = state.mouseY - adY;
-
-                ad.style.left = `${ad.offsetLeft + dx * config.game.chaserSpeed}px`;
-                ad.style.top = `${ad.offsetTop + dy * config.game.chaserSpeed}px`;
-                
-                // Check for collision with cursor
-                if (Math.sqrt(dx*dx + dy*dy) < 50) { // 50px collision radius
-                    Player.takeDamage(15);
-                    AdManager.destroyAd(ad, 0); // No points for collision
-                }
-            }
-            
-            // Video ad damage pulse
-            if (ad.dataset.isVideo) {
-                if (!ad.lastDamageTime || now - ad.lastDamageTime > 2000) {
-                    Player.takeDamage(2);
-                    ad.lastDamageTime = now;
-                }
-            }
-        });
+        this.loopRunning = true;
+        // Game logic that needs to run every frame can go here
         
-        requestAnimationFrame(Game.loop);
+        requestAnimationFrame(() => this.loop());
     }
 };
 
