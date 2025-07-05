@@ -7,51 +7,51 @@
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Poppins:wght@600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div id="game-container">
-        <h1>Ad Invaders</h1>
-        <p class="subtitle">Your browsing experience is compromised. Reclaim your screen.</p>
-        
-        <div id="ui-bar">
-            <div id="score-display">SCORE: 0</div>
-            <div id="health-container">
-                <span>HEALTH</span>
-                <div class="bar-outer">
-                    <div id="health-bar-inner"></div>
+        <!-- The canvas is now the main element, UI is an overlay -->
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="ui-overlay">
+            <div id="ui-bar">
+                <div id="score-display">SCORE: 0</div>
+                <div class="ui-stat">
+                    <span>HEALTH</span>
+                    <div class="bar-outer">
+                        <div id="health-bar-inner"></div>
+                    </div>
                 </div>
-            </div>
-             <div id="shield-container">
-                <span>SHIELD</span>
-                <div class="bar-outer">
-                    <div id="shield-bar-inner"></div>
+                 <div class="ui-stat">
+                    <span>SHIELD</span>
+                    <div class="bar-outer">
+                        <div id="shield-bar-inner"></div>
+                    </div>
                 </div>
             </div>
         </div>
-
-        <canvas id="gameCanvas"></canvas>
-
+        
         <div id="start-screen" class="overlay">
             <div class="overlay-content">
-                <h2>System Warning</h2>
-                <p>Malicious ad-ware has breached the firewall. You are the last line of defense.</p>
-                <h3>Protocol:</h3>
-                <ul>
-                    <li><strong>Left-Click:</strong> Neutralize ads via their close/skip buttons.</li>
-                    <li><strong>Right-Click (Hold):</strong> Deploy a defensive shield (requires cooldown).</li>
+                <h1 class="overlay-title">Ad Invaders</h1>
+                <p>Hostile advertising agents have breached the system. Your cursor is the last line of defense. Precision is paramount.</p>
+                <h3>Engagement Protocol</h3>
+                <ul class="controls-list">
+                    <li><span>Left-Click</span> Target and neutralize ad close/skip buttons.</li>
+                    <li><span>Right-Click</span> Deploy a temporary defensive energy shield.</li>
                 </ul>
-                <p class="warning-text"><strong>New Threat:</strong> Some ads now deploy FAKE close buttons. Aim carefully.</p>
-                <button id="startButton">Initialize Defense</button>
+                <p class="warning-text"><strong>Warning:</strong> Mis-clicks on ad infrastructure will result in critical system damage.</p>
+                <button id="startButton">Initialize Protocol</button>
             </div>
         </div>
 
         <div id="game-over-screen" class="overlay" style="display: none;">
-            <div class="overlay-content">
-                <h2>SESSION TERMINATED</h2>
-                <p>The ad-ware has achieved total system control.</p>
-                <p>Final Score: <span id="finalScore">0</span></p>
-                <button id="restartButton">Re-initialize?</button>
+            <div class.overlay-content">
+                <h2 class="overlay-title-end">SYSTEM FAILURE</h2>
+                <p>Ad-ware has achieved total network saturation.</p>
+                <p class="final-score">Final Score: <span id="finalScore">0</span></p>
+                <button id="restartButton">Attempt Reboot</button>
             </div>
         </div>
     </div>
