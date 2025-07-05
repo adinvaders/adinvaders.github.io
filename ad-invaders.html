@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ad Invaders</title>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Comic+Sans+MS&display=swap" rel="stylesheet">
+    <style>
+        /* --- Core Setup & Page Layout --- */
+        body {
+            background-color: #00008b; /* Dark Blue */
+            color: #FFF;
+            font-family: 'VT323', monospace;
+            font-size: 18px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            margin: 0;
+            padding: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .page-wrapper {
+            text-align: center;
+            max-width: 1024px;
+        }
+
+        header, footer {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px outset #fff;
+            padding: 5px 15px;
+            margin-bottom: 10px;
+            font-family: 'Comic Sans MS', cursive;
+        }
+
+        footer {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        /* --- Game Container & Player --- */
+        #game-container {
+            width: 1000px;
+            height: 600px;
+            border: 2px outset #fff;
+            background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAAXNSR0IArs4c6QAAADRJREFUKFNjZGD4z4AG/Ocx/v/n/19GRgaG/wzG4wO5GBgYGLqBUA0gB1EaHjUgAABG5Q5j3wW9xgAAAABJRU5ErkJggg=='); /* Tiled pattern */
+            background-color: #008080; /* Teal */
+            position: relative;
+            overflow: hidden;
+            cursor: none; /* Hide default cursor */
+        }
+
+        #player-cursor {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAALdJREFUWEftlNsNwjAMANr//yhPE6gJMASEEGk3k92V9LI3MjlZis84gL3wP5EBbAAdcAL6wQI4gCfYASdQ1x4QAQ9gBNpADbBwixVgB9RgD/QBe1jADhhBSnxgzgkY4QcOQA7ogApwAR3QZ1yAb5EBC5ADSJ8TkAG2sAt2wBw4gF3QAWzAEfCAHTiCCvAANogDdIC3yAG8gwLoAx6w4gs+wAz4BzxghVf0AZ+pA3b/AT+xASv++gBvYx3EiiLhQQAAAABJRU5ErkJggg=='); /* Pointer cursor */
+            background-size: contain;
+            pointer-events: none; /* Click "through" the cursor */
+            z-index: 1000;
+        }
+
+        #player-shield {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(0, 255, 255, 0.4);
+            border: 2px solid cyan;
+            box-shadow: 0 0 15px cyan;
+            transform: translate(-50%, -50%); /* Center on cursor */
+            pointer-events: none;
+            z-index: 999;
+            display: none; /* Hidden by default */
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        /* --- UI Bar --- */
+        #ui-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 1000px;
+            background: #c0c0c0;
+            color: #000;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 2px outset #fff;
+            margin-top: 10px;
+            font-size: 24px;
+        }
+        #health-bar-container {
+            width: 200px;
+            height: 20px;
+            border: 2px inset #000;
+            background: #888;
+        }
+        #health-bar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to right, #ff0000, #ffff00, #00ff00);
+            background-size: 200% 100%;
+            background-position: 0% 0%;
+            transition: width 0.3s ease, background-position 0.3s ease;
+        }
+
+        /* --- Ad Styling --- */
+        .ad {
+            position: absolute;
+            background: #c0c0c0;
+            border: 2px outset #fff;
+            box-shadow: 5px 5px 5px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            user-select: none;
+            padding: 3px;
+            z-index: 10;
+        }
+
+        .ad-title-bar {
+            background: linear-gradient(to right, #000080, #1e90ff);
+            color: #fff;
+            padding: 3px 8px;
+            font-size: 16px;
+            text-align: left;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .close-button {
+            background: #c0c0c0;
+            border: 1px outset #fff;
+            color: #000;
+            font-family: monospace;
+            font-weight: bold;
+            width: 20px;
+            height: 20px;
+            line-height: 18px;
+            text-align: center;
+            cursor: none; /* Use custom cursor */
+        }
+        .close-button:hover {
+            background: #e0e0e0;
+        }
+        .close-button:active {
+            border-style: inset;
+        }
+
+        .ad-content {
+            background: #fff;
+            color: #000;
+            padding: 20px;
+            margin: 3px;
+            flex-grow: 1;
+            text-align: center;
+            font-family: 'Comic Sans MS', cursive;
+        }
+        .ad-content h3 {
+            margin: 0 0 10px;
+            font-size: 22px;
+            color: red;
+            animation: text-flicker 3s linear infinite;
+        }
+        .ad-content p {
+            margin: 5px 0;
+        }
+
+        .fake-download-button {
+            background: linear-gradient(to bottom, #4CAF50, #45a049);
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            font-size: 16px;
+            margin: 20px auto 0;
+            border: 2px outset #fff;
+            cursor: none;
+            display: inline-block;
+            animation: pulse 1.5s infinite;
+        }
+        .fake-download-button:active {
+            border-style: inset;
+        }
+
+        /* Specific Ad Types */
+        .ad.banner {
+            width: 100%;
+            height: 90px;
+            left: 0;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            background: yellow;
+            color: red;
+            font-size: 32px;
+            z-index: 5;
+            animation: blinker 1s linear infinite;
+        }
+        .ad.banner .ad-content {
+            background: transparent;
+        }
+        .ad.virus {
+            border: 4px dashed red;
+            animation: shake 0.5s infinite;
+            z-index: 50;
+        }
+        .ad.cookie-wall {
+            width: 40%;
+            height: 40%;
+            background: rgba(0,0,0,0.75);
+            z-index: 90;
+            justify-content: center;
+            align-items: center;
+            border: 2px solid yellow;
+        }
+
+        /* --- Power-ups --- */
+        .power-up {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 30px;
+            cursor: none;
+            z-index: 200;
+            border: 3px solid white;
+            text-shadow: 0 0 5px black;
+            box-shadow: 0 0 15px white;
+            animation: powerup-glow 2s infinite ease-in-out;
+        }
+        .power-up.bomb { background: #ff4500; }
+        .power-up.iron-cursor { background: #a9a9a9; }
+
+
+        /* --- Screens (Start/Game Over) --- */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        .screen-content {
+            background: #c0c0c0;
+            color: #000;
+            border: 2px outset #fff;
+            padding: 40px;
+            text-align: center;
+            max-width: 600px;
+            font-family: 'Comic Sans MS', cursive;
+        }
+        .screen-content h2 {
+            font-size: 48px;
+            margin: 0 0 20px;
+            color: #000080;
+        }
+        .screen-content ul {
+            text-align: left;
+            display: inline-block;
+            margin: 20px 0;
+        }
+        .screen button {
+            font-family: 'VT323', monospace;
+            font-size: 28px;
+            padding: 15px 30px;
+            background: #c0c0c0;
+            border: 2px outset #fff;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .screen button:active {
+            border-style: inset;
+        }
+
+
+        /* --- Animations --- */
+        @keyframes blinker {  
+          50% { opacity: 0; }
+        }
+        @keyframes text-flicker {
+          0% { opacity: 1; }
+          50% { opacity: 0.5; }
+          100% { opacity: 1; }
+        }
+        @keyframes pulse {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.1); }
+          100% { transform: scale(1); }
+        }
+        @keyframes shake {
+          0% { transform: translate(1px, 1px) rotate(0deg); }
+          10% { transform: translate(-1px, -2px) rotate(-1deg); }
+          20% { transform: translate(-3px, 0px) rotate(1deg); }
+          30% { transform: translate(3px, 2px) rotate(0deg); }
+          100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        @keyframes powerup-glow {
+            0% { box-shadow: 0 0 15px white; }
+            50% { box-shadow: 0 0 30px yellow; }
+            100% { box-shadow: 0 0 15px white; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="page-wrapper">
+        <header>
+            <h1>Ad Invaders</h1>
+            <p>The Internet is Attacking! Survive the Onslaught of Annoying Ads.</p>
+        </header>
+
+        <div id="game-container">
+            <!-- Game elements will be injected here by JavaScript -->
+            <div id="player-cursor"></div>
+            <div id="player-shield"></div>
+        </div>
+
+        <div id="ui-bar">
+            <div class="ui-element">
+                <span>HEALTH</span>
+                <div id="health-bar-container">
+                    <div id="health-bar"></div>
+                </div>
+            </div>
+            <div class="ui-element">
+                <span>SCORE:</span> <span id="score-value">0</span>
+            </div>
+            <div class="ui-element">
+                <span>WAVE:</span> <span id="wave-value">0</span>
+            </div>
+        </div>
+        
+        <!-- Game Screens -->
+        <div id="start-screen" class="screen">
+            <div class="screen-content">
+                <h2>Welcome to Ad Invaders</h2>
+                <p><strong>Your mouse cursor is your only weapon.</strong></p>
+                <ul>
+                    <li><strong>Left-Click:</strong> Click 'X' or 'Skip Ad' buttons to destroy ads.</li>
+                    <li><strong>Right-Click:</strong> Activate a temporary shield to block damage.</li>
+                </ul>
+                <p>Mis-clicks and touching ads will damage you. Survive as long as you can!</p>
+                <button id="start-button">Start Surviving</button>
+            </div>
+        </div>
+
+        <div id="game-over-screen" class="screen" style="display: none;">
+            <div class="screen-content">
+                <h2>GAME OVER</h2>
+                <p>The ads have consumed you.</p>
+                <p>Final Score: <span id="final-score">0</span></p>
+                <p>Survived Waves: <span id="final-wave">0</span></p>
+                <button id="restart-button">Try Again</button>
+            </div>
+        </div>
+
+        <footer>
+            <p>A game by You & a helpful AI. | This area is for *real* ads, keeping the game clean!</p>
+        </footer>
+    </div>
+
+    <!-- Optional Sound FX -->
+    <audio id="sfx-click" src="https://www.myinstants.com/media/sounds/mouse-click.mp3" preload="auto"></audio>
+    <audio id="sfx-error" src="https://www.myinstants.com/media/sounds/erro.mp3" preload="auto"></audio>
+    <audio id="sfx-shield" src="https://www.myinstants.com/media/sounds/sonic_ring.mp3" preload="auto"></audio>
+    <audio id="sfx-damage" src="https://www.myinstants.com/media/sounds/roblox-death-sound_1.mp3" preload="auto"></audio>
+    <audio id="sfx-destroy" src="https://www.myinstants.com/media/sounds/explosion_1.mp3" preload="auto"></audio>
+    <audio id="sfx-bomb" src="https://www.myinstants.com/media/sounds/explosion.mp3" preload="auto"></audio>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- DOM Elements ---
+            const gameContainer = document.getElementById('game-container');
+            const playerCursor = document.getElementById('player-cursor');
+            const playerShield = document.getElementById('player-shield');
+            const healthBar = document.getElementById('health-bar');
+            const scoreValue = document.getElementById('score-value');
+            const waveValue = document.getElementById('wave-value');
+            const startScreen = document.getElementById('start-screen');
+            const gameOverScreen = document.getElementById('game-over-screen');
+            const startButton = document.getElementById('start-button');
+            const restartButton = document.getElementById('restart-button');
+            const finalScore = document.getElementById('final-score');
+            const finalWave = document.getElementById('final-wave');
+            
+            // --- Sound Effects ---
+            const sfx = {
+                click: document.getElementById('sfx-click'),
+                error: document.getElementById('sfx-error'),
+                shield: document.getElementById('sfx-shield'),
+                damage: document.getElementById('sfx-damage'),
+                destroy: document.getElementById('sfx-destroy'),
+                bomb: document.getElementById('sfx-bomb')
+            };
+
+            // --- Game State ---
+            let gameState = {
+                score: 0,
+                wave: 0,
+                health: 100,
+                isGameOver: true,
+                shield: {
+                    active: false,
+                    cooldown: false,
+                    duration: 2000, // 2 seconds
+                    cooldownTime: 5000 // 5 seconds
+                },
+                ironCursor: {
+                    active: false,
+                    duration: 5000 // 5 seconds
+                },
+                cursorPos: { x: 0, y: 0 },
+                gameLoopId: null,
+                activeAds: [],
+                activePowerUps: []
+            };
+
+            // --- Game Configuration ---
+            const config = {
+                damage: {
+                    touch: 0.2,
+                    misclick: 5,
+                    fakeDownload: 20
+                },
+                points: {
+                    destroyAd: 100
+                },
+                wave: {
+                    baseSpawnInterval: 2500, // ms
+                    intervalDecrement: 100,
+                    adsPerWave: 5
+                }
+            };
+
+            // --- AD TEMPLATES & BEHAVIORS ---
+            const adTemplates = [
+                {
+                    type: 'popup',
+                    width: 350,
+                    height: 200,
+                    title: '!! CONGRATULATIONS !!',
+                    content: `<h3>You're the 1,000,000th Visitor!</h3><p>Click below to claim your <strong>FREE</strong> iPhone!</p><div class="fake-download-button">DOWNLOAD</div>`,
+                    behavior: (ad) => { /* Standard behavior */ }
+                },
+                {
+                    type: 'popup',
+                    width: 300,
+                    height: 250,
+                    title: 'Local Singles Alert!',
+                    content: `<h3>Meet Hot Ghosts Near You!</h3><p>They're dying to meet you. Don't leave them waiting.</p><img src="https://via.placeholder.com/150x80.png/000000/FFFFFF?text=👻" alt="ghost">`,
+                    behavior: (ad) => { // Moving close button
+                        const closeBtn = ad.element.querySelector('.close-button');
+                        ad.vx = ad.vx || (Math.random() > 0.5 ? 0.5 : -0.5);
+                        ad.vy = ad.vy || (Math.random() > 0.5 ? 0.5 : -0.5);
+                        let btnX = parseFloat(closeBtn.style.right) || 0;
+                        let btnY = parseFloat(closeBtn.style.top) || 0;
+                        if (btnX > 20 || btnX < -20) ad.vx *= -1;
+                        if (btnY > 10 || btnY < -10) ad.vy *= -1;
+                        closeBtn.style.position = 'relative';
+                        closeBtn.style.right = `${btnX + ad.vx}px`;
+                        closeBtn.style.top = `${btnY + ad.vy}px`;
+                    }
+                },
+                {
+                    type: 'banner',
+                    height: 80,
+                    title: 'BANNER',
+                    content: `<span>>>> ENLARGE YOUR CURSOR! CLICK NOW FOR BIGGAH POINTERS! <<<</span>`,
+                    behavior: (ad) => {
+                        ad.x += ad.vx;
+                        if (ad.x > gameContainer.offsetWidth || ad.x < -ad.element.offsetWidth) {
+                            ad.vx *= -1;
+                        }
+                        ad.element.style.left = `${ad.x}px`;
+                    }
+                },
+                {
+                    type: 'virus',
+                    width: 280,
+                    height: 150,
+                    title: '⚠️ VIRUS WARNING ⚠️',
+                    content: `<h3>Your PC is Infected!</h3><p>Error #268D3. Critical security risk detected. Immediate action required!</p>`,
+                    behavior: (ad) => { // Chase cursor
+                        const speed = 0.8;
+                        const dx = gameState.cursorPos.x - (ad.x + ad.width / 2);
+                        const dy = gameState.cursorPos.y - (ad.y + ad.height / 2);
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist > 1) {
+                            ad.x += (dx / dist) * speed;
+                            ad.y += (dy / dist) * speed;
+                            ad.element.style.left = `${ad.x}px`;
+                            ad.element.style.top = `${ad.y}px`;
+                        }
+                    }
+                },
+                {
+                    type: 'trap',
+                    width: 300,
+                    height: 180,
+                    title: 'Free RAM Download',
+                    content: `<h3>Need More Speed?</h3><p>Download our free RAM expansion tool. 100% legitimate.</p>`,
+                    onClose: (ad) => { // Multiply on close
+                        for (let i = 0; i < 2; i++) {
+                            spawnAd('popup');
+                        }
+                    }
+                }
+            ];
+
+            // --- POWER-UP DEFINITIONS ---
+            const powerUpTypes = [
+                { 
+                    type: 'bomb', 
+                    emoji: '💣',
+                    onCollect: () => {
+                        playSound(sfx.bomb);
+                        gameState.activeAds.forEach(ad => {
+                            ad.element.remove();
+                            updateScore(config.points.destroyAd / 2); // Less points for a bomb
+                        });
+                        gameState.activeAds = [];
+                    }
+                },
+                {
+                    type: 'iron-cursor',
+                    emoji: '🛡️',
+                    onCollect: () => {
+                        playSound(sfx.shield);
+                        gameState.ironCursor.active = true;
+                        playerCursor.style.backgroundColor = 'silver';
+                        setTimeout(() => {
+                            gameState.ironCursor.active = false;
+                            playerCursor.style.backgroundColor = 'transparent';
+                        }, gameState.ironCursor.duration);
+                    }
+                }
+            ];
+
+            // ===================================================================
+            // --- PLAYER & CONTROLS ---
+            // ===================================================================
+
+            function updateCursor(e) {
+                const rect = gameContainer.getBoundingClientRect();
+                gameState.cursorPos.x = e.clientX - rect.left;
+                gameState.cursorPos.y = e.clientY - rect.top;
+
+                playerCursor.style.transform = `translate(${gameState.cursorPos.x}px, ${gameState.cursorPos.y}px)`;
+                if (gameState.shield.active) {
+                    playerShield.style.left = `${gameState.cursorPos.x}px`;
+                    playerShield.style.top = `${gameState.cursorPos.y}px`;
+                }
+            }
+
+            function handleLeftClick(e) {
+                if (gameState.isGameOver) return;
+
+                const target = e.target;
+                if (target.classList.contains('close-button')) {
+                    playSound(sfx.destroy);
+                    const adElement = target.closest('.ad');
+                    const adInstance = gameState.activeAds.find(ad => ad.element === adElement);
+                    if (adInstance) {
+                        destroyAd(adInstance);
+                    }
+                } else if (target.classList.contains('fake-download-button')) {
+                    takeDamage(config.damage.fakeDownload, 'Misclick!');
+                } else if (target.closest('.ad')) {
+                    // Clicked inside an ad but not on a button
+                    takeDamage(config.damage.misclick, 'Misclick!');
+                } else if (target.classList.contains('power-up')) {
+                    const powerUp = gameState.activePowerUps.find(p => p.element === target);
+                    if (powerUp) collectPowerUp(powerUp);
+                }
+            }
+
+            function handleRightClick(e) {
+                e.preventDefault();
+                if (gameState.isGameOver || gameState.shield.active || gameState.shield.cooldown) return;
+
+                playSound(sfx.shield);
+                gameState.shield.active = true;
+                gameState.shield.cooldown = true;
+                playerShield.style.display = 'block';
+                playerShield.style.opacity = 1;
+
+                setTimeout(() => {
+                    gameState.shield.active = false;
+                    playerShield.style.opacity = 0;
+                    setTimeout(() => playerShield.style.display = 'none', 200);
+                }, gameState.shield.duration);
+
+                setTimeout(() => {
+                    gameState.shield.cooldown = false;
+                }, gameState.shield.cooldownTime);
+            }
+
+            function takeDamage(amount, reason = '') {
+                if (gameState.shield.active || gameState.ironCursor.active) return;
+
+                playSound(sfx.damage);
+                gameState.health -= amount;
+                if (gameState.health < 0) gameState.health = 0;
+                updateUI();
+
+                if (gameState.health <= 0) {
+                    endGame();
+                }
+            }
+            
+            // ===================================================================
+            // --- AD MANAGEMENT ---
+            // ===================================================================
+
+            function spawnAd(forceType = null) {
+                let template;
+                if (forceType) {
+                    template = adTemplates.find(t => t.type === forceType);
+                } else {
+                    template = adTemplates[Math.floor(Math.random() * adTemplates.length)];
+                }
+
+                const adElement = document.createElement('div');
+                adElement.classList.add('ad', template.type);
+                adElement.style.width = `${template.width || 300}px`;
+                adElement.style.height = `${template.height || 200}px`;
+
+                const titleBar = `<div class="ad-title-bar"><span>${template.title}</span><div class="close-button">X</div></div>`;
+                adElement.innerHTML = titleBar + `<div class="ad-content">${template.content}</div>`;
+
+                const gameRect = gameContainer.getBoundingClientRect();
+                const ad = {
+                    element: adElement,
+                    type: template.type,
+                    behavior: template.behavior,
+                    onClose: template.onClose,
+                    width: template.width || 300,
+                    height: template.height || 200,
+                    x: Math.random() * (gameRect.width - (template.width || 300)),
+                    y: Math.random() * (gameRect.height - (template.height || 200)),
+                    vx: (Math.random() - 0.5) * 2, // for banner
+                    vy: (Math.random() - 0.5) * 2
+                };
+                
+                if (ad.type === 'banner') {
+                    ad.y = Math.random() > 0.5 ? 0 : gameRect.height - ad.height;
+                    ad.x = ad.vx > 0 ? -ad.width : gameRect.width;
+                }
+
+                ad.element.style.left = `${ad.x}px`;
+                ad.element.style.top = `${ad.y}px`;
+                
+                gameState.activeAds.push(ad);
+                gameContainer.appendChild(adElement);
+            }
+            
+            function destroyAd(ad) {
+                if (ad.onClose) ad.onClose(ad);
+
+                ad.element.remove();
+                gameState.activeAds = gameState.activeAds.filter(a => a !== ad);
+                updateScore(config.points.destroyAd);
+            }
+            
+            function updateAds() {
+                // Check for collision and update behavior
+                gameState.activeAds.forEach(ad => {
+                    // Behavior update
+                    if (ad.behavior) ad.behavior(ad);
+                    
+                    // Collision check
+                    const cursorRect = { x: gameState.cursorPos.x, y: gameState.cursorPos.y, width: 1, height: 1 };
+                    const adRect = ad.element.getBoundingClientRect();
+                    const gameRect = gameContainer.getBoundingClientRect();
+
+                    const isColliding = cursorRect.x < adRect.right - gameRect.left &&
+                                        cursorRect.x > adRect.left - gameRect.left &&
+                                        cursorRect.y < adRect.bottom - gameRect.top &&
+                                        cursorRect.y > adRect.top - gameRect.top;
+
+                    if (isColliding) {
+                        takeDamage(config.damage.touch);
+                    }
+                });
+            }
+
+            // ===================================================================
+            // --- POWER-UP MANAGEMENT ---
+            // ===================================================================
+            function spawnPowerUp() {
+                const template = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
+                const el = document.createElement('div');
+                el.classList.add('power-up', template.type);
+                el.textContent = template.emoji;
+                
+                const powerUp = {
+                    element: el,
+                    onCollect: template.onCollect,
+                    x: Math.random() * (gameContainer.clientWidth - 50),
+                    y: Math.random() * (gameContainer.clientHeight - 50),
+                };
+
+                el.style.left = `${powerUp.x}px`;
+                el.style.top = `${powerUp.y}px`;
+
+                gameState.activePowerUps.push(powerUp);
+                gameContainer.appendChild(el);
+
+                // Make power-up disappear after some time
+                setTimeout(() => {
+                    el.remove();
+                    gameState.activePowerUps = gameState.activePowerUps.filter(p => p !== powerUp);
+                }, 8000);
+            }
+
+            function collectPowerUp(powerUp) {
+                powerUp.onCollect();
+                powerUp.element.remove();
+                gameState.activePowerUps = gameState.activePowerUps.filter(p => p !== powerUp);
+            }
+
+            // ===================================================================
+            // --- GAME LOOP & STATE MANAGEMENT ---
+            // ===================================================================
+
+            let adSpawnCounter = 0;
+
+            function gameLoop() {
+                if (gameState.isGameOver) {
+                    cancelAnimationFrame(gameState.gameLoopId);
+                    return;
+                }
+
+                // --- Updates ---
+                updateAds();
+
+                // --- Spawning ---
+                const spawnInterval = Math.max(500, config.wave.baseSpawnInterval - (gameState.wave * config.wave.intervalDecrement));
+                adSpawnCounter += 16; // approximate ms per frame
+                if (adSpawnCounter >= spawnInterval) {
+                    adSpawnCounter = 0;
+                    spawnAd();
+                }
+                
+                // --- Wave Management ---
+                if (gameState.score >= gameState.wave * (config.points.destroyAd * config.wave.adsPerWave)) {
+                    nextWave();
+                }
+
+                gameState.gameLoopId = requestAnimationFrame(gameLoop);
+            }
+            
+            function nextWave() {
+                gameState.wave++;
+                // Spawn a power-up every few waves
+                if (gameState.wave % 3 === 0) {
+                    spawnPowerUp();
+                }
+                // Could trigger boss battles here
+                if (gameState.wave > 0 && gameState.wave % 5 === 0) {
+                    console.log("BOSS BATTLE TRIGGER!");
+                    // Boss logic would go here
+                }
+                updateUI();
+            }
+
+            function updateScore(amount) {
+                gameState.score += amount;
+                updateUI();
+            }
+
+            function updateUI() {
+                scoreValue.textContent = gameState.score;
+                waveValue.textContent = gameState.wave;
+                const healthPercentage = (gameState.health / 100);
+                healthBar.style.width = `${healthPercentage * 100}%`;
+                // Change color based on health
+                healthBar.style.backgroundPosition = `${100 - (healthPercentage * 100)}% 0%`;
+            }
+
+            function playSound(audioElement) {
+                audioElement.currentTime = 0;
+                audioElement.play().catch(e => console.log("Audio play failed, user interaction needed."));
+            }
+
+            function startGame() {
+                // Reset state
+                gameState.score = 0;
+                gameState.wave = 1;
+                gameState.health = 100;
+                gameState.isGameOver = false;
+                gameState.shield.active = false;
+                gameState.shield.cooldown = false;
+                gameState.activeAds.forEach(ad => ad.element.remove());
+                gameState.activeAds = [];
+                gameState.activePowerUps.forEach(p => p.element.remove());
+                gameState.activePowerUps = [];
+                adSpawnCounter = 0;
+                
+                updateUI();
+                
+                // Hide screens
+                startScreen.style.display = 'none';
+                gameOverScreen.style.display = 'none';
+                
+                // Start game
+                gameLoop();
+            }
+
+            function endGame() {
+                gameState.isGameOver = true;
+                cancelAnimationFrame(gameState.gameLoopId);
+                
+                // Show game over screen
+                finalScore.textContent = gameState.score;
+                finalWave.textContent = gameState.wave;
+                gameOverScreen.style.display = 'flex';
+            }
+
+            // --- Event Listeners ---
+            document.addEventListener('mousemove', updateCursor);
+            gameContainer.addEventListener('click', handleLeftClick);
+            gameContainer.addEventListener('contextmenu', handleRightClick);
+            startButton.addEventListener('click', startGame);
+            restartButton.addEventListener('click', startGame);
+
+            // Initial setup
+            updateUI();
+        });
+    </script>
+</body>
+</html>
