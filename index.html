@@ -3,26 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ad Invaders!</title>
+    <title>Ad Invaders - The Clickpocalypse</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Comic+Sans+MS&family=VT323&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Poppins:wght@600&display=swap" rel="stylesheet">
 </head>
 <body>
     <div id="game-container">
-        <h1>🚀 Ad Invaders 🚀</h1>
-        <p class="subtitle">Your screen is under attack. Only your cursor can save it.</p>
+        <h1>Ad Invaders</h1>
+        <p class="subtitle">Your browsing experience is compromised. Reclaim your screen.</p>
         
         <div id="ui-bar">
             <div id="score-display">SCORE: 0</div>
             <div id="health-container">
-                <span>HEALTH:</span>
-                <div id="health-bar-outer">
+                <span>HEALTH</span>
+                <div class="bar-outer">
                     <div id="health-bar-inner"></div>
                 </div>
             </div>
              <div id="shield-container">
-                <span>SHIELD:</span>
-                <div id="shield-bar-outer">
+                <span>SHIELD</span>
+                <div class="bar-outer">
                     <div id="shield-bar-inner"></div>
                 </div>
             </div>
@@ -32,24 +34,24 @@
 
         <div id="start-screen" class="overlay">
             <div class="overlay-content">
-                <h2>Welcome to Ad Invaders!</h2>
-                <p>Survive the onslaught of malicious ads.</p>
-                <h3>Controls:</h3>
+                <h2>System Warning</h2>
+                <p>Malicious ad-ware has breached the firewall. You are the last line of defense.</p>
+                <h3>Protocol:</h3>
                 <ul>
-                    <li><strong>Left-Click:</strong> Hit "X" or "Skip" buttons to destroy ads.</li>
-                    <li><strong>Right-Click (Hold):</strong> Activate a shield to block damage.</li>
+                    <li><strong>Left-Click:</strong> Neutralize ads via their close/skip buttons.</li>
+                    <li><strong>Right-Click (Hold):</strong> Deploy a defensive shield (requires cooldown).</li>
                 </ul>
-                <p><em>New threats detected: Chasing Virus Alerts and sticky Cookie Banners!</em></p>
-                <button id="startButton">Start the Invasion!</button>
+                <p class="warning-text"><strong>New Threat:</strong> Some ads now deploy FAKE close buttons. Aim carefully.</p>
+                <button id="startButton">Initialize Defense</button>
             </div>
         </div>
 
         <div id="game-over-screen" class="overlay" style="display: none;">
             <div class="overlay-content">
-                <h2>SYSTEM OVERRUN</h2>
-                <p>The ads have conquered your desktop.</p>
+                <h2>SESSION TERMINATED</h2>
+                <p>The ad-ware has achieved total system control.</p>
                 <p>Final Score: <span id="finalScore">0</span></p>
-                <button id="restartButton">Reboot System?</button>
+                <button id="restartButton">Re-initialize?</button>
             </div>
         </div>
     </div>
