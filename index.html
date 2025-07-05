@@ -3,18 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ad Invaders - Neon Noir (FIXED)</title>
+    <title>Ad Invaders - Overhaul (FIXED)</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <div class="ad-placeholder top-ad">(Your non-intrusive ad space)</div>
+    <div class="ad-placeholder top-ad">(A real, non-intrusive ad could be placed here)</div>
 
     <div id="game-container">
-        <div id="vignette"></div>
         <div id="player-shield"></div>
         <div id="game-screen">
             <!-- Ads and Powerups will be spawned here -->
@@ -24,7 +23,7 @@
 
         <div id="hud">
             <div class="hud-box">
-                <span class="hud-label">INTEGRITY</span>
+                <span class="hud-label">HEALTH</span>
                 <div id="health-bar-container">
                     <div id="health-bar"></div>
                 </div>
@@ -34,12 +33,12 @@
                 <span id="score-display">0</span>
             </div>
             <div class="hud-box">
-                <span class="hud-label">THREAT LEVEL</span>
+                <span class="hud-label">WAVE</span>
                 <span id="wave-display">0</span>
             </div>
             <div class="hud-box powerup-status">
                 <span class="hud-label">ABILITY</span>
-                <span id="powerup-display">ONLINE</span>
+                <span id="powerup-display">READY</span>
             </div>
         </div>
 
@@ -47,24 +46,24 @@
             <div id="start-screen" class="modal-overlay">
                 <div class="modal-content">
                     <h1>Ad Invaders</h1>
-                    <p>The system has been compromised by a rogue ad-AI. Your cursor is the last line of defense. Survive the onslaught.</p>
+                    <p>The ad-pocalypse is here. Survive waves of malicious ads with only your cursor and a trusty shield.</p>
                     <ul>
-                        <li><span class="key-icon">LMB</span><strong>Click:</strong> Terminate ad processes.</li>
-                        <li><span class="key-icon">RMB</span><strong>Hold:</strong> Engage defensive shield.</li>
+                        <li><span class="key-icon">LMB</span><strong>Left-Click:</strong> Close ads on their 'X' or action buttons.</li>
+                        <li><span class="key-icon">RMB</span><strong>Right-Click:</strong> Activate a temporary protective shield.</li>
                     </ul>
-                    <button id="start-button">Initiate Counter-Attack</button>
+                    <button id="start-button">Begin Survival</button>
                 </div>
             </div>
 
             <div id="game-over-screen" class="modal-overlay" style="display: none;">
                 <div class="modal-content">
-                    <h2>CONNECTION LOST</h2>
-                    <p>System integrity critical. User profile corrupted.</p>
+                    <h2>SESSION TERMINATED</h2>
+                    <p>The ads have overwhelmed your system.</p>
                     <div class="final-stats">
                         <div>Final Score: <span id="final-score">0</span></div>
-                        <div>Threat Level Survived: <span id="final-wave">0</span></div>
+                        <div>Highest Wave: <span id="final-wave">0</span></div>
                     </div>
-                    <button id="restart-button">Re-establish Connection</button>
+                    <button id="restart-button">Re-engage</button>
                 </div>
             </div>
             
@@ -75,9 +74,10 @@
                 </div>
             </div>
         </div>
+
     </div>
 
-    <div class="ad-placeholder bottom-ad">(Another non-intrusive ad space)</div>
+    <div class="ad-placeholder bottom-ad">(Another real, non-intrusive ad could be placed here)</div>
 
     <script src="game.js" type="module"></script>
 </body>
